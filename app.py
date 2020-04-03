@@ -1,25 +1,48 @@
+import datetime
+import glob
 import json
+import logging
 import os
+import pathlib
 import sys
 from enum import Enum
-import logging
+from typing import List
 
-import grpc
-import hydro_serving_grpc as hs
-import pymongo
-from flask import Flask, request, jsonify, url_for
+import joblib
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+from hydro_serving_grpc.contract import ModelField, ModelSignature, ModelContract
+from hydrosdk.cluster import Cluster
+from hydrosdk.image import DockerImage
+from hydrosdk.model import Model, LocalModel
 from pymongo import MongoClient
-from tabular_od_methods import TabularOutlierDetectionMethod, AutoHBOS
+from pyod.models.hbos import HBOS
 from waitress import serve
 
-from auto_od import launch_auto_od
-
-DEBUG_ENV = bool(os.getenv("DEBUG_ENV", True))
+import auto_od
+from tabular_od_methods import TabularOD, AutoHBOS
 
 with open("version.json") as version_file:
-	BUILDINFO = json.load(version_file)  # Load buildinfo with branchName, headCommitId and version label
-	BUILDINFO['pythonVersion'] = sys.version  # Augment with python runtime version
+    BUILDINFO = json.load(version_file)  # Load buildinfo with branchName, headCommitId and version label
+    BUILDINFO['pythonVersion'] = sys.version  # Augment with python runtime version
+
+
+class AutoODMethodStatuses(Enum):
+    PENDING = 0
+    STARTED = 1
+    SELECTING_MODEL = 2
+    DEPLOYING = 5
+    SUCCESS = 6
+    FAILED = -1
+    NOT_AVAILABLE = -2
+
+
+def get_mongo_client():
+    return MongoClient()
+    # return MongoClient(host=MONGO_URL, port=MONGO_PORT, maxPoolSize=200,
+    #                    username=MONGO_USER, password=MONGO_PASS,
+    #                    authSource=MONGO_AUTH_DB)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -29,136 +52,117 @@ MONGO_PORT = int(os.getenv("MONGO_PORT", 27017))
 MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
 MONGO_USER = os.getenv("MONGO_USER")
 MONGO_PASS = os.getenv("MONGO_PASS")
+
+HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS")
+
 AUTO_OD_COLLECTION_NAME = "auto_od"
 
-logger = logging.getLogger()
+# hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
 
-
-# TODO add logging!
-
-
-class AutoODMethodStatuses(Enum):
-	NOT_LAUNCHED = 1
-	LAUNCHED = 2
-	TRAINING = 3
-	EVALUATING = 4
-	DEPLOYING = 5
-	DEPLOYED = 6
-	NOT_SUPPORTED = 7
-	FAILED = 9
-
-
-def get_mongo_client():
-	return MongoClient(host=MONGO_URL, port=MONGO_PORT, maxPoolSize=200,
-					   username=MONGO_USER, password=MONGO_PASS,
-					   authSource=MONGO_AUTH_DB)
-
+hs_cluster = Cluster("https://hydro-serving.dev.hydrosphere.io")
 
 TABULAR_METHODS = [AutoHBOS()]
 
-# client = get_mongo_client()   #fixme
-# ---
-client = MongoClient('localhost', 27017)
-db = client['AUTO_OD_COLLECTION_NAME']
-db.model_statuses.insert_one({'model_id': 1,
-							  'methods_statuses': dict([(method.name, {'name': method.name,
-																	   'status': AutoODMethodStatuses.NOT_LAUNCHED.value})
-														for method in
-														TABULAR_METHODS]),
-							  "description": 'description'
-							  })
-# ---
-# FIXME change localhost to other URL SYsEnv
-MANAGER_URL = os.getenv("MANAGER_URL", "manager:9090")
-channel = grpc.insecure_channel("localhost:9090")
-stub = hs.manager.ManagerServiceStub(channel)
+MOCK_TRAINING_DATA_PATH = "s3://feature-lake/training-data/10/training_data175426489644208838110.csv"
 
-MOCK_DATA_URL = 's3://hydroserving-dev-feature-lake/adult_classification/_hs_model_incremental_version=1/035a9a387fcc4240a91470d0843f0d9d' \
-				'.parquet '
+mongo_client = get_mongo_client()
+db = mongo_client[AUTO_OD_COLLECTION_NAME]
 
 
+@app.route("/", methods=['GET'])
 def hello():
-	return "Hi! I am auto_ad Service"
+    return "Hi! I am auto_ad service"
 
 
 @app.route("/buildinfo", methods=['GET'])
 def buildinfo():
-	return jsonify(BUILDINFO)
+    return jsonify(BUILDINFO)
 
 
-@app.route('/status/<int:model_id>', methods=['GET'])
-def status(model_id):
-	model_status = db.model_statuses.find_one({'model_id': model_id})
-	
-	if not model_status:
-		
-		model_request = hs.manager.GetVersionRequest(id=model_id)
-		model_meta = stub.GetVersion(model_request)
-		supported_tensors = TabularOutlierDetectionMethod.get_compatible_tensors(model_meta.contract.predict.inputs)
-		
-		if not supported_tensors:
-			methods_statuses = dict([(method.name, {'name': method.name,
-													'status': AutoODMethodStatuses.NOT_SUPPORTED.value}) for method in
-									 TABULAR_METHODS])
-		else:
-			# Add initial statuses for all supported methods if this model has never interacted with auto_od service
-			methods_statuses = dict([(method.name, {'name': method.name,
-													'status': AutoODMethodStatuses.NOT_LAUNCHED.value}) for method in
-									 TABULAR_METHODS])
-		
-		description = f"Only float and int scalars are analysed. Analysed tensors: [{supported_tensors}]"
-		db.model_statuses.insert_one({'model_id': model_id,
-									  'methods_statuses': methods_statuses,
-									  "description": description
-									  })
-	else:
-		methods_statuses, description = model_status['methods_statuses'], model_status['description']
-	
-	return jsonify(
-		{'auto_od_available': any(
-			[m['status'] != AutoODMethodStatuses.NOT_SUPPORTED.value for method_id, m in methods_statuses.items()]),
-			'description': description,
-			'methods': methods_statuses})
+@app.route('/auto_od_metric', methods=['GET'])
+def status():
+    expected_args = {"model_version_id"}
+
+    model_version_id: int = int(request.args['model_version_id'])
+
+    model_status = db.model_statuses.find_one({'model_id': model_version_id})
+
+    if not model_status:
+        # FIXME check for model version in cluster and return appropriate HTTP Code (which allows retrying the request)
+        return Response(400)
+    else:
+        del model_status['_id']
+        return jsonify(model_status)
 
 
-@app.route('/launch/<int:model_id>/<int:method_id>', methods=['POST'])
-def launch(model_id, method_id):
-	# TODO validate for possible method_ids and model_ids
-	
-	training_data_url = MOCK_DATA_URL
-	model_version_proto = stub.GetVersion(hs.manager.GetVersionRequest(id=model_id))
-	
-	# todo check for NOT_LAUNCHED status of model_id & method_id
-	
-	# TODO COSTIL
-	method_name = TabularOutlierDetectionMethod.from_id(method_id).name
-	
-	model_status = db.model_statuses.find_one({'model_id': model_id}, sort=[('_id', pymongo.DESCENDING)])
-	print(model_status)
-	if model_status:
-		if model_status['methods_statuses'][method_name]['status'] == AutoODMethodStatuses.NOT_LAUNCHED.value:
-			
-			db.model_statuses.find_one_and_update({'model_id': model_id},
-												  {"$set": {
-													  f"methods.{method_name}.status": AutoODMethodStatuses.LAUNCHED.value}})
-			
-			status_code, msg = launch_auto_od(training_data_url, model_version_proto, method_id, db)
-			print(status_code, msg)  # FIXME change to logger.log("....")
-			
-			return jsonify({"message": msg}), status_code
-		
-		else:
-			status_code, msg = 400, "keke"
-			# RETURN INVALID STATE error
-			return jsonify({"message": msg}), status_code
-	
-	else:
-		status(model_id)
-		return launch(model_id, method_id)
+@app.route('/auto_od_metric', methods=['POST'])
+def launch():
+    # TODO add jsonschema to this route
+
+    job_config = request.get_json()
+    training_data_path = job_config['training_data_path']
+
+    model_version_id: int = job_config['model_version_id']
+    model_version = Model.find_by_id(hs_cluster, model_version_id)
+
+    logging.info(training_data_path)
+    # TODO check for support, if not supported - update status and return it
+
+    if TabularOD.supports_signature(model_version.contract.predict):
+        model_status = db.model_statuses.insert_one({'model_version_id': model_version_id,
+                                                     'training_data_path': training_data_path,
+                                                     'state': AutoODMethodStatuses.STARTED.name,
+                                                     'description': f"AutoOD training job started at {datetime.datetime.now()}"})
+    else:
+        model_status = db.model_statuses.insert_one({'model_version_id': model_version_id,
+                                                     'training_data_path': training_data_path,
+                                                     'state': AutoODMethodStatuses.NOT_AVAILABLE.name,
+                                                     'description': "There are 0 supported fields in this model signature. "
+                                                                    "To see how you can support AutoOD metric refer to the documentation"})
+
+        return jsonify({"state": model_status['state'], "description": model_status['description']})
+
+    supported_input_fields = TabularOD.get_compatible_fields(model_version.contract.predict.inputs)
+    supported_output_fields = TabularOD.get_compatible_fields(model_version.contract.predict.outputs)
+    supported_fields: List[ModelField] = supported_input_fields  # + supported_output_fields # FIXME right now there are no outputs in file?
+    supported_fields_names: List[str] = [field.name for field in supported_fields]
+
+    training_data = auto_od.load_training_data(training_data_path, supported_fields_names)
+
+    outlier_detector = HBOS()
+    outlier_detector.fit(training_data)
+
+    filename = 'monitoring_model_template/outlier_detector.joblib'
+    joblib.dump(outlier_detector, filename)
+
+    db.model_statuses.update_one({'model_version_id': model_version_id}, {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
+                                                                                   'description': "Uploading trained metric to the cluster"}})
+
+    payload = glob.glob("monitoring_model_template/*")
+    path = pathlib.Path("monitoring_model_template").absolute()
+
+    monitored_model_signature = model_version.contract.predict.signature
+    monitoring_model_signature = ModelSignature(inputs=monitored_model_signature.inputs + monitored_model_signature.outputs,
+                                                outputs=[ModelField(name="metric_value", shape=[])])
+    monitoring_model_contract = ModelContract(predict=monitoring_model_signature)
+    auto_od_metric_name = model_version.name + "_metric"
+    local_model = LocalModel(name=auto_od_metric_name,
+                             contract=monitoring_model_contract,
+                             payload=payload,
+                             path=path,
+                             runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
+
+    upload_response = local_model._LocalModel__upload(hs_cluster)
+
+    return 200
+
+
+# def get_contract(signature):
 
 
 if __name__ == "__main__":
-	if not DEBUG_ENV:
-		serve(app, host='0.0.0.0', port=5000)
-	else:
-		app.run(debug=True, host='0.0.0.0', port=5000)
+    DEBUG_ENV = bool(os.getenv("DEBUG_ENV", True))
+    if not DEBUG_ENV:
+        serve(app, host='0.0.0.0', port=5000)
+    else:
+        app.run(debug=True, host='0.0.0.0', port=5000)
