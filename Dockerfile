@@ -1,4 +1,4 @@
-FROM python:3.7.4-slim-stretch
+FROM python:3.8.2-slim-buster
 
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -22,6 +22,3 @@ WORKDIR /app
 
 COPY . /app
 EXPOSE 5000
-
-
-# use command: python app.py in docker-compose to launch

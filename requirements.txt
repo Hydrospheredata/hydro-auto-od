@@ -1,0 +1,8 @@
+flask
+waitress
+hydrosdk
+pymongo
+joblib
+pandas
+numpy
+pyod

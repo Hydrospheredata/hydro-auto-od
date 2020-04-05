@@ -10,6 +10,8 @@ def extract_value(proto):
 
 
 def predict(**kwargs):
+
+    # TODO fix it!
     x = extract_value(kwargs['input'])
     predicted = model.predict(x)
 
