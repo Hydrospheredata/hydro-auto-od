@@ -8,7 +8,7 @@ To use this service, first look at OpenAPI spec in [hydro_auto_od_openapi.yaml](
 
 
 ## Creating Auto Metric State Diagram
-
+![](docs/hydro_auto_od_state_diagram.png)
 ## Which models are eligible for creating an auto-od metric?
  hydro-auto-od creates metric which uses all supported fields of a model signature. If model 
  signature has no supported fields, then there are no way to create an auto-od metric, and state of training job shall be `SIGNATURE_NOT_SUPPORTED`
