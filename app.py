@@ -1,17 +1,18 @@
 import datetime
 import glob
 import json
-import logging
 import os
-import pathlib
 import sys
+import tempfile
 from enum import Enum
+from shutil import copytree
 from typing import List
 
 import joblib
+import pandas as pd
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
-from hydro_serving_grpc.contract import ModelField, ModelSignature, ModelContract
+from hydro_serving_grpc.contract import ModelField, ModelContract
 from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.model import Model, LocalModel
@@ -19,8 +20,8 @@ from pymongo import MongoClient
 from pyod.models.hbos import HBOS
 from waitress import serve
 
-import auto_od
-from tabular_od_methods import TabularOD, AutoHBOS
+from tabular_od_methods import TabularOD
+from utils import get_monitoring_signature_from_monitored_signature
 
 with open("version.json") as version_file:
     BUILDINFO = json.load(version_file)  # Load buildinfo with branchName, headCommitId and version label
@@ -31,42 +32,37 @@ class AutoODMethodStatuses(Enum):
     PENDING = 0
     STARTED = 1
     SELECTING_MODEL = 2
-    DEPLOYING = 5
-    SUCCESS = 6
+    SELECTING_PARAMETERS = 3
+    DEPLOYING = 4
+    SUCCESS = 5
     FAILED = -1
-    NOT_AVAILABLE = -2
+    NOT_SUPPORTED = -2
 
 
 def get_mongo_client():
     return MongoClient()
-    # return MongoClient(host=MONGO_URL, port=MONGO_PORT, maxPoolSize=200,
+    # return MongoClient(host=MONGO_URL, port=MONGO_PORT,
     #                    username=MONGO_USER, password=MONGO_PASS,
     #                    authSource=MONGO_AUTH_DB)
 
 
-app = Flask(__name__)
-CORS(app)
-
-MONGO_URL = os.getenv("MONGO_URL", "mongodb")
-MONGO_PORT = int(os.getenv("MONGO_PORT", 27017))
-MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-
 HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS")
 
-AUTO_OD_COLLECTION_NAME = "auto_od"
+MONGO_URL = os.getenv("MONGO_URL")
+MONGO_PORT = int(os.getenv("MONGO_PORT"))
+MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB")
+MONGO_USER = os.getenv("MONGO_USER")
+MONGO_PASS = os.getenv("MONGO_PASS")
+AUTO_OD_DB_NAME = os.getenv("AUTO_OD_DB_NAME", "auto_od")
 
-# hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
+DEBUG_ENV = bool(os.getenv("DEBUG", True))
 
 hs_cluster = Cluster("https://hydro-serving.dev.hydrosphere.io")
-
-TABULAR_METHODS = [AutoHBOS()]
-
-MOCK_TRAINING_DATA_PATH = "s3://feature-lake/training-data/10/training_data175426489644208838110.csv"
-
 mongo_client = get_mongo_client()
-db = mongo_client[AUTO_OD_COLLECTION_NAME]
+db = mongo_client[AUTO_OD_DB_NAME]
+
+app = Flask(__name__)
+CORS(app)
 
 
 @app.route("/", methods=['GET'])
@@ -76,11 +72,21 @@ def hello():
 
 @app.route("/buildinfo", methods=['GET'])
 def buildinfo():
+    """
+
+    :return:
+    """
     return jsonify(BUILDINFO)
 
 
-@app.route('/auto_od_metric', methods=['GET'])
+@app.route('/auto_metric', methods=['GET'])
 def status():
+    """
+    # TODO write pydoc
+    :return:
+    """
+
+    # TODO verify args provided to match OpenAPI
     expected_args = {"model_version_id"}
 
     model_version_id: int = int(request.args['model_version_id'])
@@ -88,25 +94,31 @@ def status():
     model_status = db.model_statuses.find_one({'model_id': model_version_id})
 
     if not model_status:
-        # FIXME check for model version in cluster and return appropriate HTTP Code (which allows retrying the request)
-        return Response(400)
+        return jsonify({"state": AutoODMethodStatuses.PENDING, "description": "Training job for this model version was never requested."})
     else:
-        del model_status['_id']
-        return jsonify(model_status)
+        return jsonify({"state": model_status['state'], "description": model_status['description']})
 
 
-@app.route('/auto_od_metric', methods=['POST'])
+@app.route('/auto_metric', methods=['POST'])
 def launch():
-    # TODO add jsonschema to this route
+    """
+    # TODO write pydoc
+    :return:
+    """
+    # TODO add jsonschema to this route to validate input
 
     job_config = request.get_json()
     training_data_path = job_config['training_data_path']
 
     model_version_id: int = job_config['model_version_id']
-    model_version = Model.find_by_id(hs_cluster, model_version_id)
 
-    logging.info(training_data_path)
-    # TODO check for support, if not supported - update status and return it
+    try:
+        model_version = Model.find_by_id(hs_cluster, model_version_id)
+    except ValueError:
+        return Response(400), f"Error, unable to find Model by id={model_version_id} in cluster={hs_cluster}"
+
+    if db.model_statuses.find_one({"model_version_id": model_version_id}):
+        return Response(409), f"Auto OD Training job was already launched for this model version"
 
     if TabularOD.supports_signature(model_version.contract.predict):
         model_status = db.model_statuses.insert_one({'model_version_id': model_version_id,
@@ -124,44 +136,48 @@ def launch():
 
     supported_input_fields = TabularOD.get_compatible_fields(model_version.contract.predict.inputs)
     supported_output_fields = TabularOD.get_compatible_fields(model_version.contract.predict.outputs)
-    supported_fields: List[ModelField] = supported_input_fields  # + supported_output_fields # FIXME right now there are no outputs in file?
+
+    # FIXME. right now there are no outputs in file provided? to reproduce use
+    # {"model_version_id": 83,
+    #  "training_data_path": "s3://feature-lake/training-data/83/training_data901590018946752001483.csv"
+    #  }
+    supported_fields: List[ModelField] = supported_input_fields  # + supported_output_fields
     supported_fields_names: List[str] = [field.name for field in supported_fields]
 
-    training_data = auto_od.load_training_data(training_data_path, supported_fields_names)
+    training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
+    # Train HBOS on training data from S3
     outlier_detector = HBOS()
     outlier_detector.fit(training_data)
 
-    filename = 'monitoring_model_template/outlier_detector.joblib'
-    joblib.dump(outlier_detector, filename)
+    # Create temporary directory to copy monitoring model payload there and delete folder later after uploading it to the cluster
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        monitoring_model_folder_path = f"{tmpdirname}/{model_version.name}v{model_version.version}_auto_metric"
+        copytree("monitoring_model_template", monitoring_model_folder_path)
+        joblib.dump(outlier_detector, f'{monitoring_model_folder_path}/outlier_detector.joblib')
 
-    db.model_statuses.update_one({'model_version_id': model_version_id}, {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
-                                                                                   'description': "Uploading trained metric to the cluster"}})
+        db.model_statuses.update_one({'model_version_id': model_version_id}, {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
+                                                                                       'description': "Uploading metric to the cluster"}})
 
-    payload = glob.glob("monitoring_model_template/*")
-    path = pathlib.Path("monitoring_model_template").absolute()
+        payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
 
-    monitored_model_signature = model_version.contract.predict.signature
-    monitoring_model_signature = ModelSignature(inputs=monitored_model_signature.inputs + monitored_model_signature.outputs,
-                                                outputs=[ModelField(name="metric_value", shape=[])])
-    monitoring_model_contract = ModelContract(predict=monitoring_model_signature)
-    auto_od_metric_name = model_version.name + "_metric"
-    local_model = LocalModel(name=auto_od_metric_name,
-                             contract=monitoring_model_contract,
-                             payload=payload,
-                             path=path,
-                             runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
+        monitoring_model_contract = ModelContract(predict=get_monitoring_signature_from_monitored_signature(model_version.contract.predict))
+        auto_od_metric_name = model_version.name + "_metric"
 
-    upload_response = local_model._LocalModel__upload(hs_cluster)
+        # TODO discuss which metadata should be provided here
+        local_model = LocalModel(name=auto_od_metric_name,
+                                 contract=monitoring_model_contract,
+                                 payload=payload_filenames,
+                                 path=monitoring_model_folder_path,
+                                 runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
-    return 200
+        # TODO how to check that it succeded? TODO change status based on upload response!
+        upload_response = local_model._LocalModel__upload(hs_cluster)
 
-
-# def get_contract(signature):
+    return "ok"
 
 
 if __name__ == "__main__":
-    DEBUG_ENV = bool(os.getenv("DEBUG_ENV", True))
     if not DEBUG_ENV:
         serve(app, host='0.0.0.0', port=5000)
     else:
