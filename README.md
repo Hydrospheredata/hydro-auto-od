@@ -16,12 +16,17 @@ To use this service, first look at OpenAPI spec in [hydro_auto_od_openapi.yaml](
  Supported fields are:
  * of scalar shape
  * of types:
+    * DT_HALF
     * DT_FLOAT
     * DT_DOUBLE
     * DT_INT8
     * DT_INT16
     * DT_INT32
     * DT_INT64
+    * DT_UINT8
+    * DT_UINT16
+    * DT_UINT32
+    * DT_UINT64
 
 In future more model fields will be supported.
 

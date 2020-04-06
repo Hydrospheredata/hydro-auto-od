@@ -2,12 +2,14 @@ from abc import ABC
 from typing import Callable, List
 
 from hydro_serving_grpc.contract import ModelSignature, ModelField
-from hydro_serving_grpc.tf.types_pb2 import DT_FLOAT, DT_DOUBLE, DT_INT8, DT_INT16, DT_INT32, DT_INT64
+from hydro_serving_grpc.tf.types_pb2 import *
 from pyod.models.hbos import HBOS
 
 
 class TabularOD(ABC):
-    _SUPPORTED_DTYPES = {DT_FLOAT, DT_DOUBLE, DT_INT8, DT_INT16, DT_INT32, DT_INT64}
+    _SUPPORTED_DTYPES = {DT_HALF, DT_FLOAT, DT_DOUBLE,
+                         DT_INT8, DT_INT16, DT_INT32, DT_INT64,
+                         DT_UINT8, DT_UINT16, DT_UINT32, DT_UINT64}
 
     @staticmethod
     def from_id(method_id):
