@@ -19,6 +19,7 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.model import Model, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
+from jsonschema import Draft7Validator
 from pymongo import MongoClient
 from pyod.models.hbos import HBOS
 from waitress import serve
@@ -29,6 +30,9 @@ from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NA
 with open("version.json") as version_file:
     BUILDINFO = json.load(version_file)  # Load buildinfo with branchName, headCommitId and version label
     BUILDINFO['pythonVersion'] = sys.version  # Augment with python runtime version
+
+with open("./schemas/auto_metric.json") as f:
+    auto_metric_request_json_validator = Draft7Validator(json.load(f))
 
 
 class AutoODMethodStatuses(Enum):
@@ -76,7 +80,7 @@ def hello():
 @app.route("/buildinfo", methods=['GET'])
 def buildinfo():
     """
-
+    Return build information - Python Version, build commit and service version
     :return:
     """
     return jsonify(BUILDINFO)
@@ -85,14 +89,14 @@ def buildinfo():
 @app.route('/auto_metric', methods=['GET'])
 def status():
     """
-    # TODO write pydoc
+    # Checks status of training job in mongodb
     :return:
     """
+    expected_args = {"monitored_model_version_id"}
+    if set(request.args.keys()) != expected_args:
+        return jsonify({"message": f"Expected args: {expected_args}. Provided args: {set(request.args.keys())}"}), 400
 
-    # TODO verify args provided to match OpenAPI
-    expected_args = {"model_version_id"}
-
-    model_version_id: int = int(request.args['model_version_id'])
+    model_version_id: int = int(request.args['monitored_model_version_id'])
 
     model_status = db.model_statuses.find_one({'model_id': model_version_id})
 
@@ -105,22 +109,31 @@ def status():
 @app.route('/auto_metric', methods=['POST'])
 def launch():
     """
-    # TODO write pydoc
+    Handles requests to create monitoring metrics for newly deployed model versions.
+    Expected to be called from sonar.
+    After checking that input parameters are valid, a new process will be created, and Response with HTTP code 202 will
+    be returned from. Newly created process will update state in MongoDB as specified in Readme.MD and will train outlier detection model,
+    deploy it, and attach to monitored model.
     :return:
     """
-    # TODO add jsonschema to this route to validate input
 
     job_config = request.get_json()
+
+    if not auto_metric_request_json_validator.is_valid(job_config):
+        error_message = "\n".join(auto_metric_request_json_validator.iter_errors(job_config))
+        return jsonify({"message": error_message}), 400
+
     training_data_path = job_config['training_data_path']
 
-    model_version_id: int = job_config['model_version_id']
+    model_version_id: int = job_config['monitored_model_version_id']
 
     try:
         model_version = Model.find_by_id(hs_cluster, model_version_id)
     except ValueError:
         return Response(400), f"Error, unable to find Model by id={model_version_id} in cluster={hs_cluster}"
 
-    # if db.model_statuses.find_one({"model_version_id": model_version_id}):
+    # These two lines are arguable?
+    # if db.model_statuses.find_one({"monitored_model_version_id": monitored_model_version_id}):
     #     return Response(409), f"Auto OD Training job was already launched for this model version"
 
     if TabularOD.supports_signature(model_version.contract.predict):
@@ -129,7 +142,7 @@ def launch():
         p.start()
         return Response(status=202)
     else:
-        model_status = db.model_statuses.insert_one({'model_version_id': model_version_id,
+        model_status = db.model_statuses.insert_one({'monitored_model_version_id': model_version_id,
                                                      'training_data_path': training_data_path,
                                                      'state': AutoODMethodStatuses.NOT_AVAILABLE.name,
                                                      'description': "There are 0 supported fields in this model signature. "
@@ -138,23 +151,35 @@ def launch():
         return jsonify({"state": model_status['state'], "description": model_status['description']})
 
 
-def train_and_deploy_monitoring_model(model_version_id, training_data_path):
+def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_path):
+    """
+    This functions
+    1. Downloads training data from S3 into pd.Dataframe
+    2. Uses this training data to train HBOS outlier detection model
+    3. Packs this model into temporary folder, and then into LocalModel
+    4. Uploads this LocalModel to the cluster
+    5. After this model finishes assemlby, attach it as a metric to the monitored model
+
+    :param monitored_model_version_id:
+    :param training_data_path: path pointing to s3
+    :return:
+    """
     # This method is intended to be used in another process,
     # so we need to create new MongoClient after fork
     mongo_client = get_mongo_client()
     db = mongo_client[AUTO_OD_DB_NAME]
-    db.model_statuses.insert_one({'model_version_id': model_version_id,
+    db.model_statuses.insert_one({'monitored_model_version_id': monitored_model_version_id,
                                   'training_data_path': training_data_path,
                                   'state': AutoODMethodStatuses.STARTED.name,
                                   'description': f"AutoOD training job started at {datetime.datetime.now()}"})
 
-    monitored_model = Model.find_by_id(hs_cluster, model_version_id)
+    monitored_model = Model.find_by_id(hs_cluster, monitored_model_version_id)
 
     supported_input_fields = TabularOD.get_compatible_fields(monitored_model.contract.predict.inputs)
     supported_output_fields = TabularOD.get_compatible_fields(monitored_model.contract.predict.outputs)
 
     # FIXME. right now there are no outputs in file provided? to reproduce use
-    # {"model_version_id": 83,
+    # {"monitored_model_version_id": 83,
     #  "training_data_path": "s3://feature-lake/training-data/83/training_data901590018946752001483.csv"
     #  }
 
@@ -168,8 +193,10 @@ def train_and_deploy_monitoring_model(model_version_id, training_data_path):
     outlier_detector = HBOS()
     outlier_detector.fit(training_data)
 
-    db.model_statuses.update_one({'model_version_id': model_version_id}, {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
-                                                                                   'description': "Uploading metric to the cluster"}})
+    db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
+                                 {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
+                                           'description': "Uploading metric to the cluster"}})
+
     # Create temporary directory to copy monitoring model payload there and delete folder later after uploading it to the cluster
     with tempfile.TemporaryDirectory() as tmpdirname:
         monitoring_model_folder_path = f"{tmpdirname}/{monitored_model.name}v{monitored_model.version}_auto_metric"
@@ -193,6 +220,7 @@ def train_and_deploy_monitoring_model(model_version_id, training_data_path):
                                  contract=monitoring_model_contract,
                                  payload=payload_filenames,
                                  path=monitoring_model_folder_path,
+                                 metadata={},
                                  install_command="pip install -r requirements.txt",
                                  runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
@@ -204,7 +232,7 @@ def train_and_deploy_monitoring_model(model_version_id, training_data_path):
             # Check that this model is found in the cluster
             monitoring_model = Model.find_by_id(hs_cluster, upload_response.model_version_id)
         except Exception as e:
-            db.model_statuses.update_one({'model_version_id': model_version_id},
+            db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                          {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                    'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
 
@@ -216,14 +244,14 @@ def train_and_deploy_monitoring_model(model_version_id, training_data_path):
                                              TresholdCmpOp.LESS)
             MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
         except Exception as e:
-            db.model_statuses.update_one({'model_version_id': model_version_id},
+            db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                          {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                    'description': f"Failed to attach deployed monitoring model as a metric - {str(e)}"}})
 
-        db.model_statuses.update_one({'model_version_id': model_version_id},
+        db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.SUCCESS.name, 'description': "😃"}})
 
-        return "ok"
+        return 1
 
 
 if __name__ == "__main__":
