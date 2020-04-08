@@ -21,7 +21,8 @@ DTYPE_TO_NAMES = {
 
 def get_monitoring_signature_from_monitored_signature(monitored_model_signature):
     concatenated_input = list(monitored_model_signature.inputs) + list(monitored_model_signature.outputs)
-    monitoring_model_signature = ModelSignature(inputs=concatenated_input,
+    monitoring_model_signature = ModelSignature(signature_name="predict",
+                                                inputs=concatenated_input,
                                                 outputs=[ModelField(name="value",
                                                                     shape=TensorShapeProto(),
                                                                     dtype=DT_DOUBLE)])

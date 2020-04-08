@@ -42,6 +42,11 @@ MongoDB parameters:
 * `MONGO_PASS`
 * `AUTO_OD_DB_NAME` - Name of database in mongo which will be used for this service
 
+S3 Access parameters:
+* `S3_ENDPOINT` - Points to minio or other self-hosted s3 storage, None if AWS is used
+* `AWS_ACCESS_KEY_ID`
+* `AWS_SECRET_ACCESS_KEY`
+
 Flask server parameters:
 * `APPLICATION_ROOT` - prefix of all routes specified in [hydro_auto_od_openapi.yaml](hydro-auto-od-openapi.yaml)
 * `DEBUG`
