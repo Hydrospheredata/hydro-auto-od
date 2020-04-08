@@ -221,12 +221,11 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                 predict=get_monitoring_signature_from_monitored_signature(monitored_model.contract.predict))
             auto_od_metric_name = monitored_model.name + "_metric"
 
-            # TODO discuss which metadata should be provided here
             local_model = LocalModel(name=auto_od_metric_name,
                                      contract=monitoring_model_contract,
                                      payload=payload_filenames,
                                      path=monitoring_model_folder_path,
-                                     metadata={},
+                                     metadata={"created_by": "hydro_auto_od"},
                                      install_command="pip install -r requirements.txt",
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
@@ -247,7 +246,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
 
-    sleep(10)  # FIXME make proper waiting for the end of the monitoring model assembly
+    sleep(10)  # TODO make proper waiting for the end of the monitoring model assembly
     try:
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
