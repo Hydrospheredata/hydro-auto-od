@@ -13,7 +13,7 @@ paths:
       description: Get status and description of current progress of autoOD training job
       parameters:
         - in: query
-          name: model_version_id
+          name: monitored_model_version_id
           description: Unique Model Version Identifier
           required: true
           schema:
@@ -48,10 +48,10 @@ components:
     AutoODRequest:
       type: object
       required:
-        - model_version_id
+        - monitored_model_version_id
         - training_data_path
       properties:
-        model_version_id:
+        monitored_model_version_id:
           type: integer
           example: 82
         training_data_path:

@@ -16,12 +16,17 @@ To use this service, first look at OpenAPI spec in [hydro_auto_od_openapi.yaml](
  Supported fields are:
  * of scalar shape
  * of types:
+    * DT_HALF
     * DT_FLOAT
     * DT_DOUBLE
     * DT_INT8
     * DT_INT16
     * DT_INT32
     * DT_INT64
+    * DT_UINT8
+    * DT_UINT16
+    * DT_UINT32
+    * DT_UINT64
 
 In future more model fields will be supported.
 
@@ -37,10 +42,10 @@ MongoDB parameters:
 * `MONGO_PASS`
 * `AUTO_OD_DB_NAME` - Name of database in mongo which will be used for this service
 
-AWS/Minio parameters:
+S3 Access parameters:
+* `S3_ENDPOINT` - Points to minio or other self-hosted s3 storage, None if AWS is used
 * `AWS_ACCESS_KEY_ID`
 * `AWS_SECRET_ACCESS_KEY`
-* `AWS_STORAGE_ENDPOINT`
 
 Flask server parameters:
 * `APPLICATION_ROOT` - prefix of all routes specified in [hydro_auto_od_openapi.yaml](hydro-auto-od-openapi.yaml)
