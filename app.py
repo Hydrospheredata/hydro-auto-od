@@ -10,6 +10,7 @@ from shutil import copytree
 from time import sleep
 from typing import List
 
+import git
 import joblib
 import pandas as pd
 from flask import Flask, jsonify, request, Response
@@ -28,9 +29,15 @@ from waitress import serve
 from tabular_od_methods import TabularOD
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
 
-with open("version.json") as version_file:
-    BUILDINFO = json.load(version_file)  # Load buildinfo with branchName, headCommitId and version label
-    BUILDINFO['pythonVersion'] = sys.version  # Augment with python runtime version
+with open("version") as f:
+    VERSION = f.read().strip()
+    repo = git.Repo(".")
+    BUILDINFO = {
+        "version": VERSION,
+        "gitHeadCommit": repo.active_branch.commit.hexsha,
+        "gitCurrentBranch": repo.active_branch.name,
+        "pythonVersion": sys.version
+    }
 
 with open("./schemas/auto_metric.json") as f:
     auto_metric_request_json_validator = Draft7Validator(json.load(f))
@@ -43,8 +50,8 @@ class AutoODMethodStatuses(Enum):
     SELECTING_PARAMETERS = 3
     DEPLOYING = 4
     SUCCESS = 5
-    FAILED = -1
-    NOT_SUPPORTED = -2
+    FAILED = 6
+    NOT_SUPPORTED = 7
 
 
 def get_mongo_client():
@@ -129,19 +136,24 @@ def launch():
 
     monitored_model_version_id: int = job_config['monitored_model_version_id']
 
+    code, message = process_auto_metric_request(training_data_path, monitored_model_version_id)
+    return Response(status=code), jsonify({"message": message})
+
+
+def process_auto_metric_request(training_data_path, monitored_model_version_id) -> (int, str):
     try:
         model_version = Model.find_by_id(hs_cluster, monitored_model_version_id)
     except ValueError:
-        return Response(status=400)
+        return 400, f"Model id={monitored_model_version_id} not found"
 
     if db.model_statuses.find_one({"monitored_model_version_id": monitored_model_version_id}):
-        return Response(status=409)
+        return 409, f"Training job already requested for molde id={monitored_model_version_id}"
 
     if TabularOD.supports_signature(model_version.contract.predict):
         p = Process(target=train_and_deploy_monitoring_model,
                     args=(monitored_model_version_id, training_data_path))
         p.start()
-        return Response(status=202)
+        return 202, f"Started training job"
     else:
         model_status = db.model_statuses.insert_one({'monitored_model_version_id': monitored_model_version_id,
                                                      'training_data_path': training_data_path,
@@ -149,7 +161,7 @@ def launch():
                                                      'description': "There are 0 supported fields in this model signature. "
                                                                     "To see how you can support AutoOD metric refer to the documentation"})
 
-        return jsonify({"state": model_status['state'], "description": model_status['description']})
+        return 200, f"Model state is {model_status['state']}, {model_status['description']}"
 
 
 def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_path):

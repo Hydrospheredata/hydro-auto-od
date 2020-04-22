@@ -50,3 +50,6 @@ S3 Access parameters:
 Flask server parameters:
 * `APPLICATION_ROOT` - prefix of all routes specified in [hydro_auto_od_openapi.yaml](hydro-auto-od-openapi.yaml)
 * `DEBUG`
+
+GRPC server parameters:
+* `GRPC_PORT`
