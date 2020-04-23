@@ -147,7 +147,7 @@ def process_auto_metric_request(training_data_path, monitored_model_version_id) 
         return 400, f"Model id={monitored_model_version_id} not found"
 
     if db.model_statuses.find_one({"monitored_model_version_id": monitored_model_version_id}):
-        return 409, f"Training job already requested for molde id={monitored_model_version_id}"
+        return 409, f"Training job already requested for model id={monitored_model_version_id}"
 
     if TabularOD.supports_signature(model_version.contract.predict):
         p = Process(target=train_and_deploy_monitoring_model,
