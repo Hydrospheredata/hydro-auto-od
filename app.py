@@ -245,6 +245,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
             while upload_response.building():
                 pass
     except Exception as e:
+        print("Error!")
+        print(e)
         db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to pack & deploy monitoring model to a cluster - {str(e)}"}})
@@ -252,8 +254,11 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     try:
         # Check that this model is found in the cluster
-        monitoring_model = Model.find_by_id(hs_cluster, upload_response.model_version_id)
+        monitoring_model = Model.find_by_id(hs_cluster, upload_response.model.id)
+
     except Exception as e:
+        print("Error")
+        print(e)
         db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
