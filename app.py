@@ -25,6 +25,9 @@ from pymongo import MongoClient
 from pyod.models.hbos import HBOS
 from s3fs import S3FileSystem
 from waitress import serve
+import sseclient
+import requests
+import json
 
 from tabular_od_methods import TabularOD
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
@@ -242,8 +245,17 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
             upload_response: UploadResponse = local_model._LocalModel__upload(hs_cluster)
-            while upload_response.building():
-                pass
+            #while upload_response.building():
+            #    pass
+            response = requests.get(HS_CLUSTER_ADDRESS + "/api/v2/events", stream=True)
+            client = sseclient.SSEClient(response)
+            for event in client.events():
+                print(event.data)
+                if event.event == "ModelUpdate":
+                    data = json.loads(event.data)
+                    if data.get("id") == upload_response.model.id and data.get("status") != "Assembling":
+                        break
+                #pprint.pprint(json.loads(event.data))
     except Exception as e:
         print("Error!")
         print(e)
