@@ -261,7 +261,12 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      contract=monitoring_model_contract,
                                      payload=payload_filenames,
                                      path=monitoring_model_folder_path,
-                                     metadata={"created_by": "hydro_auto_od"},
+                                     metadata={
+                                         "created_by": "hydro_auto_od",
+                                         "training_data_path": training_data_path,
+                                         "monitored_model_id": str(monitored_model_version_id),
+                                         "monitored_model": repr(monitored_model)
+                                     },
                                      install_command="pip install -r requirements.txt",
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
