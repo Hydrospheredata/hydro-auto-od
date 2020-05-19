@@ -10,7 +10,7 @@ from multiprocessing import Process
 from shutil import copytree
 from time import sleep
 from typing import List
-from logging.config import dictConfig
+from logging.config import fileConfig
 
 import git
 import joblib
@@ -33,22 +33,7 @@ import requests
 from tabular_od_methods import TabularOD
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
 
-dictConfig({
-    'version': 1,
-    'formatters': {'default':{
-        'format': '%(levelname)s [%(threadName)s] %(asctime)-15s %(pathname)s.%(lineno)d %(message)s'
-    }},
-    'handlers': {'wsgi': {
-        'class': 'logging.StreamHandler',
-        'stream': 'ext://sys.stdout',
-        'formatter': 'default'
-    }},
-    'root': {
-        'level': 'INFO',
-        'handlers': ['wsgi']
-    }
-})
-logger = logging.getLogger("app")
+fileConfig("logging_config.ini")
 
 with open("version") as f:
     VERSION = f.read().strip()
@@ -207,7 +192,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                   'state': AutoODMethodStatuses.STARTED.name,
                                   'description': f"AutoOD training job started at {datetime.datetime.now()}"})
 
-    logger.info("Getting monitored model (%d)", monitored_model_version_id)
+    logging.info("Getting monitored model (%d)", monitored_model_version_id)
     monitored_model = Model.find_by_id(hs_cluster, monitored_model_version_id)
 
     supported_input_fields = TabularOD.get_compatible_fields(monitored_model.contract.predict.inputs)
@@ -222,7 +207,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     supported_fields_names: List[str] = [field.name for field in supported_fields]
     supported_fields_dtypes: List[str] = [field.dtype for field in supported_fields]
 
-    logger.info("%s: Reading training data from %s", repr(monitored_model), training_data_path)
+    logging.info("%s: Reading training data from %s", repr(monitored_model), training_data_path)
     if S3_ENDPOINT:
         s3 = S3FileSystem(client_kwargs={'endpoint_url': S3_ENDPOINT})
         training_data = pd.read_csv(s3.open(training_data_path, mode='rb'))[supported_fields_names]
@@ -230,7 +215,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
     # Train HBOS on training data from S3
-    logger.info("%s: Training HBOS", repr(monitored_model))
+    logging.info("%s: Training HBOS", repr(monitored_model))
     outlier_detector = HBOS()
     outlier_detector.fit(training_data)
 
@@ -272,17 +257,17 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
             response = requests.get(HS_CLUSTER_ADDRESS + "/api/v2/events", stream=True)
             client = sseclient.SSEClient(response)
-            logger.info("%s: Uploading monitoring model", repr(monitored_model))
+            logging.info("%s: Uploading monitoring model", repr(monitored_model))
             upload_response: UploadResponse = local_model._LocalModel__upload(hs_cluster)
-            logger.info("%s: Waiting for monitoring model is built", repr(monitored_model))
+            logging.info("%s: Waiting for monitoring model is built", repr(monitored_model))
             for event in client.events():
-                logger.debug(event.data)
+                logging.debug(event.data)
                 if event.event == "ModelUpdate":
                     data = json.loads(event.data)
                     if data.get("id") == upload_response.model.id and data.get("status") != "Assembling":
                         break
     except Exception as e:
-        logger.exception("%s: Error while uploading monitoring model", repr(monitored_model))
+        logging.exception("%s: Error while uploading monitoring model", repr(monitored_model))
         db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to pack & deploy monitoring model to a cluster - {str(e)}"}})
@@ -293,21 +278,21 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         monitoring_model = Model.find_by_id(hs_cluster, upload_response.model.id)
 
     except Exception as e:
-        logger.exception("%s: Error while finding monitoring model", repr(monitored_model))
+        logging.exception("%s: Error while finding monitoring model", repr(monitored_model))
         db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
 
     # sleep(10)  # TODO make proper waiting for the end of the monitoring model assembly
     try:
-        logger.info("%s: Creating metric spec", repr(monitored_model))
+        logging.info("%s: Creating metric spec", repr(monitored_model))
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
                                          outlier_detector.threshold_,
                                          TresholdCmpOp.LESS)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
-        logger.exception("%s: Error while MetricSpec creating", repr(monitored_model))
+        logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))
         db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to attach deployed monitoring model as a metric - {str(e)}"}})
@@ -316,7 +301,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
                                  {"$set": {'state': AutoODMethodStatuses.SUCCESS.name, 'description': "😃"}})
 
-    logger.info("%s: Done", repr(monitored_model))
+    logging.info("%s: Done", repr(monitored_model))
     return 1
 
 
