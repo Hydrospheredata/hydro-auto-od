@@ -2,51 +2,28 @@ import datetime
 import glob
 import json
 import os
-import sys
 import tempfile
 import logging
 from enum import Enum
 from multiprocessing import Process
 from shutil import copytree
-from time import sleep
 from typing import List
-from logging.config import fileConfig
 
-import git
 import joblib
 import pandas as pd
-from flask import Flask, jsonify, request, Response
-from flask_cors import CORS
 from hydro_serving_grpc.contract import ModelField, ModelContract
 from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.model import Model, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
-from jsonschema import Draft7Validator
 from pymongo import MongoClient
 from pyod.models.hbos import HBOS
 from s3fs import S3FileSystem
-from waitress import serve
 import sseclient
 import requests
 
 from tabular_od_methods import TabularOD
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
-
-fileConfig("logging_config.ini")
-
-with open("version") as f:
-    VERSION = f.read().strip()
-    repo = git.Repo(".")
-    BUILDINFO = {
-        "version": VERSION,
-        "gitHeadCommit": repo.active_branch.commit.hexsha,
-        "gitCurrentBranch": repo.active_branch.name,
-        "pythonVersion": sys.version
-    }
-
-with open("./schemas/auto_metric.json") as f:
-    auto_metric_request_json_validator = Draft7Validator(json.load(f))
 
 
 class AutoODMethodStatuses(Enum):
@@ -80,71 +57,6 @@ DEBUG_ENV = bool(os.getenv("DEBUG", True))
 hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
 mongo_client = get_mongo_client()
 db = mongo_client[AUTO_OD_DB_NAME]
-
-app = Flask(__name__)
-CORS(app)
-
-
-@app.route("/", methods=['GET'])
-def hello():
-    return "Hi! I am auto_ad service"
-
-
-@app.route("/buildinfo", methods=['GET'])
-def buildinfo():
-    """
-    Return build information - Python Version, build commit and service version
-    :return:
-    """
-    return jsonify(BUILDINFO)
-
-
-@app.route('/auto_metric', methods=['GET'])
-def status():
-    """
-    # Checks status of training job in mongodb
-    :return:
-    """
-    expected_args = {"monitored_model_version_id"}
-    if set(request.args.keys()) != expected_args:
-        return jsonify({"message": f"Expected args: {expected_args}. Provided args: {set(request.args.keys())}"}), 400
-
-    model_version_id: int = int(request.args['monitored_model_version_id'])
-
-    model_status = db.model_statuses.find_one({'monitored_model_version_id': model_version_id})
-
-    if not model_status:
-        return jsonify({"state": AutoODMethodStatuses.PENDING.name,
-                        "description": "Training job for this model version was never requested."})
-    else:
-        return jsonify({"state": model_status['state'],
-                        "description": model_status['description']})
-
-
-@app.route('/auto_metric', methods=['POST'])
-def launch():
-    """
-    Handles requests to create monitoring metrics for newly deployed model versions.
-    Expected to be called from sonar.
-    After checking that input parameters are valid, a new process will be created, and Response with HTTP code 202 will
-    be returned from. Newly created process will update state in MongoDB as specified in Readme.MD and will train outlier detection model,
-    deploy it, and attach to monitored model.
-    :return:
-    """
-
-    job_config = request.get_json()
-
-    if not auto_metric_request_json_validator.is_valid(job_config):
-        error_message = "\n".join([error.message for error in auto_metric_request_json_validator.iter_errors(job_config)])
-        return jsonify({"message": error_message}), 400
-
-    training_data_path = job_config['training_data_path']
-
-    monitored_model_version_id: int = job_config['monitored_model_version_id']
-
-    code, message = process_auto_metric_request(training_data_path, monitored_model_version_id)
-    return Response(status=code), jsonify({"message": message})
-
 
 def process_auto_metric_request(training_data_path, monitored_model_version_id) -> (int, str):
     try:
@@ -227,7 +139,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         # Create temporary directory to copy monitoring model payload there and delete folder later after uploading it to the cluster
         with tempfile.TemporaryDirectory() as tmpdirname:
             monitoring_model_folder_path = f"{tmpdirname}/{monitored_model.name}v{monitored_model.version}_auto_metric"
-            copytree("monitoring_model_template", monitoring_model_folder_path)
+            copytree("resources/monitoring_model_template", monitoring_model_folder_path)
             joblib.dump(outlier_detector, f'{monitoring_model_folder_path}/outlier_detector.joblib')
 
             # Save names and dtypes of analysed model fields to use in handling new requests in func_main.py
@@ -283,7 +195,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      {"$set": {'state': AutoODMethodStatuses.FAILED.name,
                                                'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
 
-    # sleep(10)  # TODO make proper waiting for the end of the monitoring model assembly
     try:
         logging.info("%s: Creating metric spec", repr(monitored_model))
         # Add monitoring model to the monitored model
@@ -303,10 +214,3 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     logging.info("%s: Done", repr(monitored_model))
     return 1
-
-
-if __name__ == "__main__":
-    if not DEBUG_ENV:
-        serve(app, host='0.0.0.0', port=5000)
-    else:
-        app.run(debug=True, host='0.0.0.0', port=5000)

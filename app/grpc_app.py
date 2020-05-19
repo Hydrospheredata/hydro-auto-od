@@ -1,4 +1,5 @@
 import logging
+from logging.config import fileConfig
 import os
 from concurrent import futures
 
@@ -10,6 +11,8 @@ from grpc_health.v1.health_pb2_grpc import HealthServicer
 from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server as health_add
 
 from app import get_mongo_client, AUTO_OD_DB_NAME, process_auto_metric_request
+
+fileConfig("resources/logging_config.ini")
 
 GRPC_PORT = os.getenv("GRPC_PORT", 5000)
 
