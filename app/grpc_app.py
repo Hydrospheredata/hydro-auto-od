@@ -10,7 +10,8 @@ from grpc_health.v1.health_pb2 import HealthCheckResponse
 from grpc_health.v1.health_pb2_grpc import HealthServicer
 from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server as health_add
 
-from app import get_mongo_client, AUTO_OD_DB_NAME, process_auto_metric_request
+from app import process_auto_metric_request
+from training_status_storage import TrainingStatusStorage
 
 fileConfig("resources/logging_config.ini")
 
@@ -18,17 +19,14 @@ GRPC_PORT = os.getenv("GRPC_PORT", 5000)
 
 
 class AutoODServiceServicer(hs_grpc.auto_od.AutoOdServiceServicer, HealthServicer):
-    def __init__(self):
-        self.db = get_mongo_client()[AUTO_OD_DB_NAME]
-
     def GetModelStatus(self, request, context):
-        model_status = self.db.model_statuses.find_one({'monitored_model_version_id': request.model_version_id})
-        if not model_status:
-            return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.PENDING,
-                                               description="Training job for this model version was never requested.")
-        else:
+        model_status = TrainingStatusStorage.find_by_model_version_id(request.model_version_id)
+        if model_status is not None:
             return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.Value(model_status['state']),
                                                description=model_status['description'])
+        else:
+            return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.PENDING,
+                                               description="Training job for this model version was never requested.")
 
     def LaunchAutoOd(self, request, context):
         training_data_path, model_version_id = request.training_data_path, request.model_version_id
@@ -37,6 +35,7 @@ class AutoODServiceServicer(hs_grpc.auto_od.AutoOdServiceServicer, HealthService
 
     def Check(self, request, context):
         return HealthCheckResponse(status="SERVING")
+
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))

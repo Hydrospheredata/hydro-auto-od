@@ -4,7 +4,6 @@ import json
 import os
 import tempfile
 import logging
-from enum import Enum
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
@@ -16,47 +15,23 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.model import Model, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
-from pymongo import MongoClient
 from pyod.models.hbos import HBOS
 from s3fs import S3FileSystem
 import sseclient
 import requests
 
 from tabular_od_methods import TabularOD
+from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
-
-
-class AutoODMethodStatuses(Enum):
-    PENDING = 0
-    STARTED = 1
-    SELECTING_MODEL = 2
-    SELECTING_PARAMETERS = 3
-    DEPLOYING = 4
-    SUCCESS = 5
-    FAILED = 6
-    NOT_SUPPORTED = 7
-
-
-def get_mongo_client():
-    return MongoClient(host=MONGO_URL, port=MONGO_PORT,
-                       username=MONGO_USER, password=MONGO_PASS,
-                       authSource=MONGO_AUTH_DB)
 
 
 HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS", "http://localhost")
 
-MONGO_URL = os.getenv("MONGO_URL", "localhost")
-MONGO_PORT = int(os.getenv("MONGO_PORT", 27017))
-MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-AUTO_OD_DB_NAME = os.getenv("AUTO_OD_DB_NAME", "auto_od")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 DEBUG_ENV = bool(os.getenv("DEBUG", True))
 
 hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
-mongo_client = get_mongo_client()
-db = mongo_client[AUTO_OD_DB_NAME]
+
 
 def process_auto_metric_request(training_data_path, monitored_model_version_id) -> (int, str):
     try:
@@ -64,7 +39,7 @@ def process_auto_metric_request(training_data_path, monitored_model_version_id) 
     except ValueError:
         return 400, f"Model id={monitored_model_version_id} not found"
 
-    if db.model_statuses.find_one({"monitored_model_version_id": monitored_model_version_id}):
+    if TrainingStatusStorage.find_by_model_version_id(monitored_model_version_id) is not None:
         return 409, f"Training job already requested for model id={monitored_model_version_id}"
 
     if TabularOD.supports_signature(model_version.contract.predict):
@@ -73,12 +48,10 @@ def process_auto_metric_request(training_data_path, monitored_model_version_id) 
         p.start()
         return 202, f"Started training job"
     else:
-        model_status = db.model_statuses.insert_one({'monitored_model_version_id': monitored_model_version_id,
-                                                     'training_data_path': training_data_path,
-                                                     'state': AutoODMethodStatuses.NOT_AVAILABLE.name,
-                                                     'description': "There are 0 supported fields in this model signature. "
-                                                                    "To see how you can support AutoOD metric refer to the documentation"})
-
+        desc = "There are 0 supported fields in this model signature. " \
+               "To see how you can support AutoOD metric refer to the documentation"
+        model_status = TrainingStatus(monitored_model_version_id, training_data_path, AutoODMethodStatuses.NOT_SUPPORTED, desc)
+        TrainingStatusStorage.save_status(model_status)
         return 200, f"Model state is {model_status['state']}, {model_status['description']}"
 
 
@@ -97,12 +70,9 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     """
     # This method is intended to be used in another process,
     # so we need to create new MongoClient after fork
-    mongo_client = get_mongo_client()
-    db = mongo_client[AUTO_OD_DB_NAME]
-    db.model_statuses.insert_one({'monitored_model_version_id': monitored_model_version_id,
-                                  'training_data_path': training_data_path,
-                                  'state': AutoODMethodStatuses.STARTED.name,
-                                  'description': f"AutoOD training job started at {datetime.datetime.now()}"})
+    description = f"AutoOD training job started at {datetime.datetime.now()}"
+    model_status = TrainingStatus(monitored_model_version_id, training_data_path, AutoODMethodStatuses.STARTED, description)
+    TrainingStatusStorage.save_status(model_status)
 
     logging.info("Getting monitored model (%d)", monitored_model_version_id)
     monitored_model = Model.find_by_id(hs_cluster, monitored_model_version_id)
@@ -131,9 +101,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     outlier_detector = HBOS()
     outlier_detector.fit(training_data)
 
-    db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
-                                 {"$set": {'state': AutoODMethodStatuses.DEPLOYING.name,
-                                           'description': "Uploading metric to the cluster"}})
+    model_status.deploying("Uploading metric to the cluster")
+    TrainingStatusStorage.save_status(model_status)
 
     try:
         # Create temporary directory to copy monitoring model payload there and delete folder later after uploading it to the cluster
@@ -180,9 +149,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                         break
     except Exception as e:
         logging.exception("%s: Error while uploading monitoring model", repr(monitored_model))
-        db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
-                                     {"$set": {'state': AutoODMethodStatuses.FAILED.name,
-                                               'description': f"Failed to pack & deploy monitoring model to a cluster - {str(e)}"}})
+        model_status.failing(f"Failed to pack & deploy monitoring model to a cluster - {str(e)}")
+        TrainingStatusStorage.save_status(model_status)
         return -1
 
     try:
@@ -191,9 +159,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     except Exception as e:
         logging.exception("%s: Error while finding monitoring model", repr(monitored_model))
-        db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
-                                     {"$set": {'state': AutoODMethodStatuses.FAILED.name,
-                                               'description': f"Failed to find deployed monitoring model in a cluster - {str(e)}"}})
+        model_status.failing(f"Failed to find deployed monitoring model in a cluster - {str(e)}")
+        TrainingStatusStorage.save_status(model_status)
 
     try:
         logging.info("%s: Creating metric spec", repr(monitored_model))
@@ -204,13 +171,12 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
         logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))
-        db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
-                                     {"$set": {'state': AutoODMethodStatuses.FAILED.name,
-                                               'description': f"Failed to attach deployed monitoring model as a metric - {str(e)}"}})
+        model_status.failing(f"Failed to attach deployed monitoring model as a metric - {str(e)}")
+        TrainingStatusStorage.save_status(model_status)
         return -1
 
-    db.model_statuses.update_one({'monitored_model_version_id': monitored_model_version_id},
-                                 {"$set": {'state': AutoODMethodStatuses.SUCCESS.name, 'description': "😃"}})
+    model_status.success()
+    TrainingStatusStorage.save_status(model_status)
 
     logging.info("%s: Done", repr(monitored_model))
     return 1
