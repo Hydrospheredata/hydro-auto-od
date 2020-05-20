@@ -10,3 +10,5 @@ hydro-serving-grpc~=2.3.0.dev1
 gitpython~=2.1
 s3fs~=0.4.2
 sseclient-py==1.7
+requests~=2.23.0
+typing~=3.7.4.1

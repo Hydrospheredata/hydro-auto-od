@@ -8,7 +8,7 @@ import hydro_serving_grpc as hs_grpc
 
 from grpc_health.v1.health_pb2 import HealthCheckResponse
 from grpc_health.v1.health_pb2_grpc import HealthServicer
-from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server as health_add
+from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server
 
 from app import process_auto_metric_request
 from training_status_storage import TrainingStatusStorage
@@ -22,8 +22,8 @@ class AutoODServiceServicer(hs_grpc.auto_od.AutoOdServiceServicer, HealthService
     def GetModelStatus(self, request, context):
         model_status = TrainingStatusStorage.find_by_model_version_id(request.model_version_id)
         if model_status is not None:
-            return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.Value(model_status['state']),
-                                               description=model_status['description'])
+            return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.Value(model_status.state),
+                                               description=model_status.description)
         else:
             return hs_grpc.auto_od.ModelStatus(state=hs_grpc.auto_od.AutoODState.PENDING,
                                                description="Training job for this model version was never requested.")
@@ -41,7 +41,7 @@ def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
     servicer = AutoODServiceServicer()
     hs_grpc.auto_od.add_AutoOdServiceServicer_to_server(servicer, server)
-    health_add(servicer, server)
+    add_HealthServicer_to_server(servicer, server)
     server.add_insecure_port(f'[::]:{GRPC_PORT}')
     server.start()
     logging.info(f"Server started at [::]:{GRPC_PORT}")
