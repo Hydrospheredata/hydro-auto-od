@@ -29,20 +29,26 @@ hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
 
 
 def process_auto_metric_request(training_data_path, monitored_model_version_id) -> (int, str):
+    logging.info("Started processing auto-od request for model (%d)", monitored_model_version_id)
+
     try:
         model_version = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
     except ModelVersion.NotFound:
+        logging.error("Monitored model (%d) not found", monitored_model_version_id)
         return 400, f"Model id={monitored_model_version_id} not found"
 
     if TrainingStatusStorage.find_by_model_version_id(monitored_model_version_id) is not None:
+        logging.info("%s: Training job already requested", repr(model_version))
         return 409, f"Training job already requested for model id={monitored_model_version_id}"
 
     if TabularOD.supports_signature(model_version.contract.predict):
         p = Process(target=train_and_deploy_monitoring_model,
                     args=(monitored_model_version_id, training_data_path))
         p.start()
+        logging.info("%s: Created training job for model", repr(model_version))
         return 202, f"Started training job"
     else:
+        logging.info("%s: signature is not supported", monitored_model_version_id)
         desc = ("There are 0 supported fields in this model signature. "
                 "To see how you can support AutoOD metric refer to the documentation")
         model_status = \
