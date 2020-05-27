@@ -1,4 +1,4 @@
-hydrosdk~=2.3.0rc2
+hydrosdk~=2.3.0
 pymongo~=3.8.0
 joblib~=0.14.1
 pandas~=1.0.1
@@ -11,4 +11,4 @@ gitpython~=2.1
 s3fs~=0.4.2
 sseclient-py==1.7
 requests~=2.23.0
-typing~=3.7.4.1
+typing~=3.7.4.1pip
