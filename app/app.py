@@ -24,7 +24,7 @@ from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NA
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 DEBUG_ENV = bool(os.getenv("DEBUG", True))
 
-HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS", "http://localhost"
+HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS", "http://localhost")
 hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
 
 
