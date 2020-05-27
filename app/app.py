@@ -1,9 +1,9 @@
 import datetime
 import glob
 import json
+import logging
 import os
 import tempfile
-import logging
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
@@ -13,30 +13,25 @@ import pandas as pd
 from hydro_serving_grpc.contract import ModelField, ModelContract
 from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
-from hydrosdk.model import Model, LocalModel, UploadResponse
+from hydrosdk.modelversion import ModelVersion, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
 from pyod.models.hbos import HBOS
 from s3fs import S3FileSystem
-import sseclient
-import requests
-
 from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
 
-
-HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS", "http://localhost")
-
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 DEBUG_ENV = bool(os.getenv("DEBUG", True))
 
+HS_CLUSTER_ADDRESS = os.getenv("HS_CLUSTER_ADDRESS", "http://localhost"
 hs_cluster = Cluster(HS_CLUSTER_ADDRESS)
 
 
 def process_auto_metric_request(training_data_path, monitored_model_version_id) -> (int, str):
     try:
-        model_version = Model.find_by_id(hs_cluster, monitored_model_version_id)
-    except ValueError:
+        model_version = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
+    except ModelVersion.NotFound:
         return 400, f"Model id={monitored_model_version_id} not found"
 
     if TrainingStatusStorage.find_by_model_version_id(monitored_model_version_id) is not None:
@@ -48,8 +43,8 @@ def process_auto_metric_request(training_data_path, monitored_model_version_id) 
         p.start()
         return 202, f"Started training job"
     else:
-        desc = "There are 0 supported fields in this model signature. " \
-               "To see how you can support AutoOD metric refer to the documentation"
+        desc = ("There are 0 supported fields in this model signature. "
+                "To see how you can support AutoOD metric refer to the documentation")
         model_status = \
             TrainingStatus(monitored_model_version_id, training_data_path, AutoODMethodStatuses.NOT_SUPPORTED, desc)
         TrainingStatusStorage.save_status(model_status)
@@ -77,7 +72,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     TrainingStatusStorage.save_status(model_status)
 
     logging.info("Getting monitored model (%d)", monitored_model_version_id)
-    monitored_model = Model.find_by_id(hs_cluster, monitored_model_version_id)
+    monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
 
     supported_input_fields = TabularOD.get_compatible_fields(monitored_model.contract.predict.inputs)
     # supported_output_fields = TabularOD.get_compatible_fields(monitored_model.contract.predict.outputs)
@@ -140,17 +135,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      install_command="pip install -r requirements.txt",
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
-            response = requests.get(HS_CLUSTER_ADDRESS + "/api/v2/events", stream=True)
-            client = sseclient.SSEClient(response)
             logging.info("%s: Uploading monitoring model", repr(monitored_model))
-            upload_response: UploadResponse = local_model.upload(hs_cluster)[local_model]
-            logging.info("%s: Waiting for monitoring model is built", repr(monitored_model))
-            for event in client.events():
-                logging.debug(event.data)
-                if event.event == "ModelUpdate":
-                    data = json.loads(event.data)
-                    if data.get("id") == upload_response.model.id and data.get("status") != "Assembling":
-                        break
+            upload_response: UploadResponse = local_model.upload(hs_cluster, wait=True)[local_model]
     except Exception as e:
         logging.exception("%s: Error while uploading monitoring model", repr(monitored_model))
         model_status.failing(f"Failed to pack & deploy monitoring model to a cluster - {str(e)}")
@@ -159,9 +145,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     try:
         # Check that this model is found in the cluster
-        monitoring_model = Model.find_by_id(hs_cluster, upload_response.model.id)
-
-    except Exception as e:
+        monitoring_model = ModelVersion.find_by_id(hs_cluster, upload_response.modelversion.id)
+    except ModelVersion.NotFound as e:
         logging.exception("%s: Error while finding monitoring model", repr(monitored_model))
         model_status.failing(f"Failed to find deployed monitoring model in a cluster - {str(e)}")
         TrainingStatusStorage.save_status(model_status)
