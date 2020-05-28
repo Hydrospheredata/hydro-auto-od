@@ -76,7 +76,7 @@ class TrainingStatusStorage:
 
     @staticmethod
     def save_status(status: TrainingStatus):
-        TrainingStatusStorage.__collection().update_one(
+        TrainingStatusStorage.__collection().replace_one(
             {'model_version_id': status.model_version_id},
             {
                 'model_version_id': status.model_version_id,
