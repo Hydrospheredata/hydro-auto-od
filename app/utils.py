@@ -3,9 +3,9 @@ from hydro_serving_grpc.contract import ModelSignature, ModelField
 from hydro_serving_grpc.tf.types_pb2 import *
 
 DTYPE_TO_NAMES = {
-    DT_HALF: "float16",
-    DT_FLOAT: "float32",
-    DT_DOUBLE: "float64",
+    DT_HALF: "half",
+    DT_FLOAT: "float",
+    DT_DOUBLE: "double",
 
     DT_INT8: "int8",
     DT_INT16: "int16",
