@@ -99,11 +99,17 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     else:
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
+    # TODO work with dirty data
+
     # Train HBOS on training data from S3
     logging.info("%s: Training HBOS", repr(monitored_model))
+    # TODO iterate over [IsolationForest, LOF, One-Class SVM]
     outlier_detector = HBOS()
     outlier_detector.fit(training_data)
 
+    # TODO evaluate all 3 models and select the best
+
+    # TODO Upload the best one to the cluster . . .
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
 
