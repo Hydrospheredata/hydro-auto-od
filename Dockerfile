@@ -18,7 +18,7 @@ RUN pip3 install --user -r ./requirements.txt
 
 FROM python:3.8.2-slim-buster
 
-RUN useradd --create-home --shell /bin/bash app
+RUN useradd -u 42069 --create-home --shell /bin/bash app
 USER app
 
 # non-interactive env vars https://bugs.launchpad.net/ubuntu/+source/ansible/+bug/1833013
