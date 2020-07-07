@@ -21,6 +21,8 @@ from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
 
+from emmv_selection import model_selection
+
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 DEBUG_ENV = bool(os.getenv("DEBUG", True))
 
@@ -99,19 +101,25 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     else:
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
-    # TODO work with dirty data
 
-    # Train HBOS on training data from S3
-    logging.info("%s: Training HBOS", repr(monitored_model))
-    # TODO iterate over [IsolationForest, LOF, One-Class SVM]
-    outlier_detector = HBOS()
-    outlier_detector.fit(training_data)
+    '''
+    EM-MV Process
 
-    # TODO evaluate all 3 models and select the best
+    '''
 
-    # TODO Upload the best one to the cluster . . .
+    chosen_model = model_selection(training_data)
+
+    '''
+    Training and deploying the model
+    '''
+    outlier_detector = chosen_model.od_method_constructor(**chosen_model.hyperparameters).fit(training_data)
+
+
+
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
+
+
 
     try:
         # Create temporary directory to copy monitoring model payload there
