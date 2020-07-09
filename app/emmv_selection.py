@@ -6,13 +6,13 @@ import logging
 
 
 
-  iforest_hyperparams = [{"n_estimators":20}, {"n_estimators":50}, {"n_estimators":100}, 
-              {"n_estimators":150}, {"n_estimators":200}, {"n_estimators":250}]
+iforest_hyperparams = [{"n_estimators":20}, {"n_estimators":50}, {"n_estimators":100}, 
+                      {"n_estimators":150}, {"n_estimators":200}, {"n_estimators":250}]
 
-  lof_hyperparams = [{"n_neighbors":5}, {"n_neighbors":6}, {"n_neighbors":7}, 
-            {"n_neighbors":8}, {"n_neighbors":10}, {"n_neighbors":15}, {"n_neighbors":20}]
+lof_hyperparams = [{"n_neighbors":5}, {"n_neighbors":6}, {"n_neighbors":7}, {"n_neighbors":8}, 
+                  {"n_neighbors":10}, {"n_neighbors":15}, {"n_neighbors":20}]
 
-  ocsvm_hyperparams = [{"kernel":'rbf'}, {'kernel':'poly'}]
+ocsvm_hyperparams = [{"kernel":'rbf'}, {'kernel':'poly'}]
 
 
 def model_selection(X):
