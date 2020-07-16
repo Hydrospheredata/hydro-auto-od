@@ -102,25 +102,25 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     else:
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
-
-    '''
-    EM-MV Process
-
+    '''EM-MV Process
     '''
 
     chosen_model = model_selection(training_data)
 
+    '''Training and deploying the model
     '''
-    Training and deploying the model
+    outlier_detector = chosen_model.model_with_params.fit(training_data)
+
+    '''Extracting threshold for different models
     '''
-    outlier_detector = chosen_model.od_method_constructor(**chosen_model.hyperparameters).fit(training_data)
 
-
+    if threshold_ not in dir(outlier_detector):
+        threshold = outlier_detector.offset_
+    else:
+        threshold = outlier_detector.threshold_
 
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
-
-
 
     try:
         # Create temporary directory to copy monitoring model payload there
@@ -177,7 +177,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         logging.info("%s: Creating metric spec", repr(monitored_model))
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
-                                         outlier_detector.threshold_,
+                                         threshold,
                                          TresholdCmpOp.LESS)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
