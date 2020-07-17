@@ -31,10 +31,8 @@ class OutlierDetectionMethod(ABC):
         volume_support = (lim_sup - lim_inf).prod() 
 
         if volume_support == np.inf:
-            print('Volume Support is inf. Metric might be biased.')
             logging.info('Volume Support is inf. Metric might be biased.')
         if volume_support == 0.0:
-            print('Volume Support is 0.0. Check your data format.')
             logging.info('Volume Support is 0.0. Check your data format.')
         clean_data_percent = 0.9  
         ocsvm_max_train = 10000   
@@ -42,7 +40,6 @@ class OutlierDetectionMethod(ABC):
         alpha_max = 0.999
         axis_alpha = np.arange(alpha_min, alpha_max, 0.0001)
         x_axis = np.arange(0, 100, 0.01) 
-        # x_axis = np.arange(0, 100 / volume_support, 0.01 / volume_support)
 
         uniform_samples = np.random.uniform(lim_inf, lim_sup, size=(n_generated, n_features)) 
         clean_data_score = self.model.decision_function(x_test)

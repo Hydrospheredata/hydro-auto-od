@@ -34,11 +34,15 @@ def model_selection(X):
   best_mv_model = min(iforest_models + lof_models + ocsvm_models, key=lambda x: x.mv)
   best_em_model = max(iforest_models + lof_models + ocsvm_models, key=lambda x: x.em)
 
+  if best_mv_model.mv < 0 and best_em_model.em > 0:
+    logging.info('MV value is lower than zero. Applying best model by EM.')
+    outlier_detector = best_em_model
+
   if best_em_model == best_mv_model:
     logging.info('EM-MV convergence is successful!')
     outlier_detector = best_mv_model
   else:
-    logging.info('Applying best model by MV')
+    logging.info('Applying best model by MV.')
     outlier_detector = best_mv_model
 
   return outlier_detector

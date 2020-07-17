@@ -8,7 +8,6 @@ def em(t, t_max, volume_support, s_unif, s_X, n_generated):
     s_X_unique = np.unique(s_X)
     EM_t[0] = 1.
     for u in s_X_unique:
-        # if (s_unif >= u).sum() > n_generated / 1000:
         EM_t = np.maximum(EM_t, 1. / n_samples * (s_X > u).sum() -
                           t * (s_unif > u).sum() / n_generated
                           * volume_support)
@@ -28,7 +27,6 @@ def mv(axis_alpha, volume_support, s_unif, s_X, n_generated):
     u = s_X[s_X_argsort[-1]]
     mv = np.zeros(axis_alpha.shape[0])
     for i in range(axis_alpha.shape[0]):
-        # pdb.set_trace()
         while mass < axis_alpha[i]:
             cpt += 1
             u = s_X[s_X_argsort[-cpt]]
