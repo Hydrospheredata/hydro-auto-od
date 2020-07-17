@@ -114,7 +114,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     '''Extracting threshold for different models
     '''
 
-    if threshold_ not in dir(outlier_detector):
+    if 'threshold_' not in dir(outlier_detector):
         threshold = outlier_detector.offset_
     else:
         threshold = outlier_detector.threshold_
