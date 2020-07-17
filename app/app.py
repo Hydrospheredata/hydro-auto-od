@@ -114,10 +114,15 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     '''Extracting threshold for different models
     '''
 
-    if 'threshold_' not in dir(outlier_detector):
+    if outlier_detector.__module__.split('.')[0] == 'sklearn':
         threshold = outlier_detector.offset_
-    else:
+        threshold_property = TresholdCmpOp.GREATER
+
+    elif outlier_detector.__module__.split('.')[0] == 'pyod':
         threshold = outlier_detector.threshold_
+        threshold_property = TresholdCmpOp.LESS
+    else:
+        logging.info('Unknown library of outlier detector!')
 
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
@@ -178,7 +183,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
                                          threshold,
-                                         TresholdCmpOp.LESS)
+                                         threshold_property)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
         logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))
