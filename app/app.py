@@ -15,13 +15,12 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.modelversion import ModelVersion, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
-from pyod.models.hbos import HBOS
+# from pyod.models.hbos import HBOS
+from emmv_selection import model_selection
 from s3fs import S3FileSystem
 from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
-
-from emmv_selection import model_selection
 
 
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
@@ -68,7 +67,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     3. Packs this model into temporary folder, and then into LocalModel
     4. Uploads this LocalModel to the cluster
     5. After this model finishes assembly, attach it as a metric to the monitored model
-
     :param monitored_model_version_id:
     :param training_data_path: path pointing to s3
     :return:
@@ -102,27 +100,12 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     else:
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
-    '''EM-MV Process
-    '''
+    # Applying EM-MV
+
+    logging.info("%s: Applying EM-MV", repr(monitored_model))
 
     chosen_model = model_selection(training_data)
-
-    '''Training and deploying the model
-    '''
-    outlier_detector = chosen_model.model_with_params.fit(training_data)
-
-    '''Extracting threshold for different models
-    '''
-
-    if outlier_detector.__module__.split('.')[0] == 'sklearn':
-        threshold = outlier_detector.offset_
-        threshold_property = TresholdCmpOp.GREATER
-
-    elif outlier_detector.__module__.split('.')[0] == 'pyod':
-        threshold = outlier_detector.threshold_
-        threshold_property = TresholdCmpOp.LESS
-    else:
-        logging.info('Unknown library of outlier detector!')
+    outlier_detector = chosen_model.recreate(training_data)
 
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
@@ -182,8 +165,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         logging.info("%s: Creating metric spec", repr(monitored_model))
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
-                                         threshold,
-                                         threshold_property)
+                                         outlier_detector.threshold_,
+                                         chosen_model.threshold_comparator)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
         logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))

@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics import auc
+import logging
 
 
 def em(t, t_max, volume_support, s_unif, s_X, n_generated):
@@ -13,7 +14,7 @@ def em(t, t_max, volume_support, s_unif, s_X, n_generated):
                           * volume_support)
     amax = np.argmax(EM_t <= t_max) + 1
     if amax == 1:
-        print ('\n failed to achieve t_max \n')
+        logging.info('\n failed to achieve t_max \n')
         amax = -1
     AUC = auc(t[:amax], EM_t[:amax])
     return AUC, EM_t, amax
