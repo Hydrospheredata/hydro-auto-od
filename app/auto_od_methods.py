@@ -5,12 +5,9 @@ from emmv import em, mv
 import logging
 import numpy as np
 import random
-from hydrosdk.monitoring import TresholdCmpOp
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.svm import OneClassSVM
-
-
+from pyod.models.iforest import IForest
+from pyod.models.lof import LOF
+from pyod.models.ocsvm import OCSVM
 
 class OutlierDetectionMethod(ABC):
     """ Wrapper class for different outlier detection methods"""
@@ -38,28 +35,22 @@ class OutlierDetectionMethod(ABC):
         alpha_max = 0.999
         axis_alpha = np.arange(alpha_min, alpha_max, 0.0001)
         x_axis = np.arange(0, 100, 0.01) 
-
         uniform_samples = np.random.uniform(lim_inf, lim_sup, size=(n_generated, n_features)) 
-        clean_data_score = self.model.decision_function(x_test)
-        dirty_data_score = self.model.decision_function(uniform_samples)
+        clean_data_score = -self.model.decision_function(x_test) 
+        dirty_data_score = -self.model.decision_function(uniform_samples) 
 
         # calculate EM-MV
         self.em, _, _ = em(x_axis, clean_data_percent, volume_support, dirty_data_score, clean_data_score, n_generated)
         self.mv, _ = mv(axis_alpha, volume_support, dirty_data_score, clean_data_score, n_generated)
         del self.model  # Clean memory
 
-    def decision_function(self, X):
-        return self.model.decision_function(X)
-
     def recreate(self, X):
         self.model = self.od_method_constructor(**self.hyperparameters).fit(X)
-        self.model.threshold_ = self.model.offset_
         return self.model
 
 
 class AutoIForest(OutlierDetectionMethod):
-    od_method_constructor = IsolationForest
-    threshold_comparator = TresholdCmpOp.GREATER
+    od_method_constructor = IForest
 
     def __init__(self, hyperparameters):
         super().__init__(hyperparameters)
@@ -70,8 +61,7 @@ class AutoIForest(OutlierDetectionMethod):
         
 
 class AutoLOF(OutlierDetectionMethod):
-    od_method_constructor = LocalOutlierFactor
-    threshold_comparator = TresholdCmpOp.GREATER
+    od_method_constructor = LOF
 
     def __init__(self, hyperparameters):
         super().__init__(hyperparameters)
@@ -82,8 +72,7 @@ class AutoLOF(OutlierDetectionMethod):
 
 
 class AutoOCSVM(OutlierDetectionMethod):
-    od_method_constructor = OneClassSVM
-    threshold_comparator = TresholdCmpOp.GREATER
+    od_method_constructor = OCSVM
 
     def __init__(self, hyperparameters):
         super().__init__(hyperparameters)

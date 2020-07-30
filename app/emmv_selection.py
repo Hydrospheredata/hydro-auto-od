@@ -9,12 +9,13 @@ import logging
 
 iforest_hyperparams = [{"n_estimators":100}, {"n_estimators":20}, {"n_estimators":50}, 
                       {"n_estimators":150}, {"n_estimators":200}, {"n_estimators":250}]
+iforest_hyperparams = [dict(kwargs, **{'contamination': 0.04}) for kwargs in iforest_hyperparams]
 
 lof_hyperparams = [{"n_neighbors":20}, {"n_neighbors":5}, {"n_neighbors":6}, {"n_neighbors":7}, 
                   {"n_neighbors":8}, {"n_neighbors":15}, {"n_neighbors":25}]
-lof_hyperparams = [dict(kwargs, **{'novelty': True}) for kwargs in lof_hyperparams]
+lof_hyperparams = [dict(kwargs, **{'contamination': 0.04}) for kwargs in lof_hyperparams]
 
-ocsvm_hyperparams = [{"kernel":'rbf'}, {'kernel':'poly'}]
+ocsvm_hyperparams = [{"kernel":'rbf', 'nu':0.01, 'contamination':0.04}, {'kernel':'poly', 'nu':0.01, 'contamination':0.04}]
 
 
 def model_selection(X):

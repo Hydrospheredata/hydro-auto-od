@@ -7,7 +7,6 @@ import tempfile
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
-
 import joblib
 import pandas as pd
 from hydro_serving_grpc.contract import ModelField, ModelContract
@@ -15,7 +14,6 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.modelversion import ModelVersion, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
-# from pyod.models.hbos import HBOS
 from emmv_selection import model_selection
 from s3fs import S3FileSystem
 from tabular_od_methods import TabularOD
@@ -166,7 +164,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
                                          outlier_detector.threshold_,
-                                         chosen_model.threshold_comparator)
+                                         TresholdCmpOp.LESS)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
         logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))
