@@ -76,7 +76,7 @@ class AutoOCSVM(OutlierDetectionMethod):
     def __init__(self, hyperparameters):
         super().__init__(hyperparameters)
         self.model = AutoOCSVM.od_method_constructor(**hyperparameters)
-        ocsvm_max_train = 10000
+        self.ocsvm_max_train = 10000
 
     def fit(self, X):
         if len(X) > ocsvm_max_train:
