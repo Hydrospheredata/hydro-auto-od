@@ -79,7 +79,7 @@ class AutoOCSVM(OutlierDetectionMethod):
         self.ocsvm_max_train = 10000
 
     def fit(self, X):
-        if len(X) > ocsvm_max_train:
+        if len(X) > self.ocsvm_max_train:
             self.model.fit(random.choices(np.array(X), k=self.ocsvm_max_train))
         else:
             self.model.fit(X)
