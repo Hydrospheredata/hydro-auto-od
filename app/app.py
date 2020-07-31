@@ -7,7 +7,6 @@ import tempfile
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
-
 import joblib
 import pandas as pd
 from hydro_serving_grpc.contract import ModelField, ModelContract
@@ -15,11 +14,12 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.modelversion import ModelVersion, LocalModel, UploadResponse
 from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
-from pyod.models.hbos import HBOS
+from emmv_selection import model_selection
 from s3fs import S3FileSystem
 from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
+
 
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 DEBUG_ENV = bool(os.getenv("DEBUG", True))
@@ -65,7 +65,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     3. Packs this model into temporary folder, and then into LocalModel
     4. Uploads this LocalModel to the cluster
     5. After this model finishes assembly, attach it as a metric to the monitored model
-
     :param monitored_model_version_id:
     :param training_data_path: path pointing to s3
     :return:
@@ -99,10 +98,12 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     else:
         training_data = pd.read_csv(training_data_path)[supported_fields_names]
 
-    # Train HBOS on training data from S3
-    logging.info("%s: Training HBOS", repr(monitored_model))
-    outlier_detector = HBOS()
-    outlier_detector.fit(training_data)
+    # Applying EM-MV
+
+    logging.info("%s: Applying EM-MV", repr(monitored_model))
+
+    chosen_model = model_selection(training_data)
+    outlier_detector = chosen_model.recreate(training_data)
 
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
