@@ -1,24 +1,5 @@
 import numpy as np
 from sklearn.metrics import auc
-import logging
-
-
-def em(t, t_max, volume_support, s_unif, s_X, n_generated):
-    EM_t = np.zeros(t.shape[0])
-    n_samples = s_X.shape[0]
-    s_X_unique = np.unique(s_X)
-    EM_t[0] = 1.
-    for u in s_X_unique:
-        EM_t = np.maximum(EM_t, 1. / n_samples * (s_X > u).sum() -
-                          t * (s_unif > u).sum() / n_generated
-                          * volume_support)
-    amax = np.argmax(EM_t <= t_max) + 1
-    if amax == 1:
-        logging.info('\n failed to achieve t_max \n')
-        amax = -1
-    AUC = auc(t[:amax], EM_t[:amax])
-    return AUC, EM_t, amax
-
 
 def mv(axis_alpha, volume_support, s_unif, s_X, n_generated):
     n_samples = s_X.shape[0]
