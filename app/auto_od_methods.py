@@ -1,10 +1,11 @@
-
 from abc import ABC
 from typing import Dict
-from emmv import em, mv
+from emmv import mv
 import logging
 import numpy as np
 import random
+from operator import mul
+from functools import reduce
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
@@ -24,22 +25,15 @@ class OutlierDetectionMethod(ABC):
         _, n_features = np.shape(X)
         lim_inf = X.min(axis=0)
         lim_sup = X.max(axis=0)
-        volume_support = (lim_sup - lim_inf).prod() 
-        if volume_support == np.inf:
-            logging.info('Volume Support is inf. Metric might be biased.')
-        if volume_support == 0.0:
-            logging.info('Volume Support is 0.0. Check your data format.')
-        clean_data_percent = 0.9  
-        alpha_min = 0.9
-        alpha_max = 0.999
-        axis_alpha = np.arange(alpha_min, alpha_max, 0.0001)
-        x_axis = np.arange(0, 100, 0.01) 
+        volume_support = reduce(lambda x, y: x+y,
+                                [np.log(x+1) for x in lim_sup - lim_inf])
+        axis_alpha = np.arange(0.9, 0.999, 0.0001)
+        if np.isnan(volume_support):
+            logging.info('Data has negative variables. Change the data format!')
         uniform_samples = np.random.uniform(lim_inf, lim_sup, size=(n_generated, n_features)) 
         clean_data_score = -self.model.decision_function(x_test) 
         dirty_data_score = -self.model.decision_function(uniform_samples) 
-
-        # calculate EM-MV
-        self.em, _, _ = em(x_axis, clean_data_percent, volume_support, dirty_data_score, clean_data_score, n_generated)
+        # calculate MV
         self.mv, _ = mv(axis_alpha, volume_support, dirty_data_score, clean_data_score, n_generated)
         del self.model  # Clean memory
 
