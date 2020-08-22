@@ -23,16 +23,19 @@ def model_selection(X):
   x_train, x_test = train_test_split(X, test_size = 0.3)
 
   iforest_models = [AutoIForest(kwargs) for kwargs in iforest_hyperparams]
-
   lof_models = [AutoLOF(kwargs) for kwargs in lof_hyperparams]
   ocsvm_models = [AutoOCSVM(kwargs) for kwargs in ocsvm_hyperparams]
 
+  if X.shape[1] > 170:
+      candidates = iforest_models + ocsvm_models
+  else:
+      candidates = iforest_models + lof_models + ocsvm_models
 
-  for model in iforest_models + lof_models + ocsvm_models:
+  for model in candidates:
     model.fit(x_train)
     model.evaluate(X, x_test)
 
-  outlier_detector = min(iforest_models + lof_models + ocsvm_models, key=lambda x: x.mv)
+  outlier_detector = min(candidates, key=lambda x: x.mv)
 
 
   return outlier_detector

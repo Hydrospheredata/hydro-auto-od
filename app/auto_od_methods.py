@@ -25,11 +25,8 @@ class OutlierDetectionMethod(ABC):
         _, n_features = np.shape(X)
         lim_inf = X.min(axis=0)
         lim_sup = X.max(axis=0)
-        volume_support = reduce(lambda x, y: x+y,
-                                [np.log(x+1) for x in lim_sup - lim_inf])
+        volume_support = sum(np.log1p(x) for x in lim_sup - lim_inf)
         axis_alpha = np.arange(0.9, 0.999, 0.0001)
-        if np.isnan(volume_support):
-            logging.info('Data has negative variables. Change the data format!')
         uniform_samples = np.random.uniform(lim_inf, lim_sup, size=(n_generated, n_features)) 
         clean_data_score = -self.model.decision_function(x_test) 
         dirty_data_score = -self.model.decision_function(uniform_samples) 
