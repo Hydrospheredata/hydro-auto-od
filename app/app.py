@@ -135,6 +135,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      path=monitoring_model_folder_path,
                                      metadata={
                                          "created_by": "hydro_auto_od",
+                                         "is_metric": 'True',
                                          "training_data_path": training_data_path,
                                          "monitored_model_id": str(monitored_model_version_id),
                                          "monitored_model": repr(monitored_model)
