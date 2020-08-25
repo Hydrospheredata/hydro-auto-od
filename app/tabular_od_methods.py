@@ -29,13 +29,3 @@ class TabularOD(ABC):
         compatible_output_fields = cls.get_compatible_fields(signature.inputs)
         return len(compatible_input_fields) + len(compatible_output_fields) > 0
 
-
-class AutoHBOS(TabularOD):
-    def __init__(self):
-        self.name = "HBOS"
-        self.id = 1
-        self.comment = ""
-        self._hbos = HBOS()
-        self.requirements = "scikit-learn==0.20.2\nnumpy==1.16.2"
-        self.predict: Callable = self._hbos.predict
-        self.fit: Callable = self._hbos.fit

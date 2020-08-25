@@ -2,8 +2,6 @@
 from auto_od_methods import AutoIForest, AutoLOF, AutoOCSVM
 from sklearn.model_selection import train_test_split
 import numpy as np
-import logging
-
 
 
 # Models with predefined hyperparameters
