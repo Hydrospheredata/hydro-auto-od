@@ -1,11 +1,8 @@
 from abc import ABC
 from typing import Dict
 from emmv import mv
-import logging
 import numpy as np
 import random
-from operator import mul
-from functools import reduce
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
@@ -21,16 +18,18 @@ class OutlierDetectionMethod(ABC):
         self.model = None
       
     def evaluate(self, X, x_test):
+        # Parameters for mv calculation
         n_generated = 100000
         _, n_features = np.shape(X)
         lim_inf = X.min(axis=0)
         lim_sup = X.max(axis=0)
         volume_support = sum(np.log1p(x) for x in lim_sup - lim_inf)
         axis_alpha = np.arange(0.9, 0.999, 0.0001)
+        # Preparing uniformally distributed samples and making predictions for each group of samples
         uniform_samples = np.random.uniform(lim_inf, lim_sup, size=(n_generated, n_features)) 
         clean_data_score = -self.model.decision_function(x_test) 
         dirty_data_score = -self.model.decision_function(uniform_samples) 
-        # calculate MV
+        # Calculating MV
         self.mv, _ = mv(axis_alpha, volume_support, dirty_data_score, clean_data_score, n_generated)
         del self.model  # Clean memory
 
@@ -38,6 +37,7 @@ class OutlierDetectionMethod(ABC):
         self.model = self.od_method_constructor(**self.hyperparameters).fit(X)
         return self.model
 
+# Defining a class for each type of model used in the evaluation process
 
 class AutoIForest(OutlierDetectionMethod):
     od_method_constructor = IForest

@@ -6,6 +6,7 @@ import logging
 
 
 
+# Models with predefined hyperparameters
 
 iforest_hyperparams = [{"n_estimators":100}, {"n_estimators":20}, {"n_estimators":50}, 
                       {"n_estimators":150}, {"n_estimators":200}, {"n_estimators":250}]
@@ -26,14 +27,22 @@ def model_selection(X):
   lof_models = [AutoLOF(kwargs) for kwargs in lof_hyperparams]
   ocsvm_models = [AutoOCSVM(kwargs) for kwargs in ocsvm_hyperparams]
 
+  '''Dimension restriction for model's choice to speed up 
+  	the process for high-dimensional cases
+  '''
+
   if X.shape[1] > 170:
       candidates = iforest_models + ocsvm_models
   else:
       candidates = iforest_models + lof_models + ocsvm_models
 
+  # Evaluating each model among candidates
+
   for model in candidates:
     model.fit(x_train)
     model.evaluate(X, x_test)
+
+# Choose the model by the min MV score
 
   outlier_detector = min(candidates, key=lambda x: x.mv)
 
