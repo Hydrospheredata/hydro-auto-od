@@ -12,8 +12,8 @@ import pandas as pd
 from hydro_serving_grpc.contract import ModelField, ModelContract
 from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
-from hydrosdk.modelversion import ModelVersion, LocalModel, UploadResponse
-from hydrosdk.monitoring import TresholdCmpOp, MetricSpecConfig, MetricSpec
+from hydrosdk.modelversion import ModelVersion, LocalModel
+from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
 from emmv_selection import model_selection
 from s3fs import S3FileSystem
 from tabular_od_methods import TabularOD
@@ -33,8 +33,8 @@ def process_auto_metric_request(training_data_path, monitored_model_version_id) 
 
     try:
         model_version = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
-    except ModelVersion.NotFound:
-        logging.error("Monitored model (%d) not found", monitored_model_version_id)
+    except Exception as e:
+        logging.error(f"{str(e)}")
         return 400, f"Model id={monitored_model_version_id} not found"
 
     if TrainingStatusStorage.find_by_model_version_id(monitored_model_version_id) is not None:
@@ -144,7 +144,9 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
             logging.info("%s: Uploading monitoring model", repr(monitored_model))
-            upload_response: UploadResponse = local_model.upload(hs_cluster, wait=True)[local_model]
+            upload_response = local_model.upload(hs_cluster)
+            upload_response.lock_till_released()
+
     except Exception as e:
         logging.exception("%s: Error while uploading monitoring model", repr(monitored_model))
         model_status.failing(f"Failed to pack & deploy monitoring model to a cluster - {str(e)}")
@@ -153,8 +155,9 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     try:
         # Check that this model is found in the cluster
-        monitoring_model = ModelVersion.find_by_id(hs_cluster, upload_response.modelversion.id)
-    except ModelVersion.NotFound as e:
+
+        monitoring_model = ModelVersion.find_by_id(hs_cluster, upload_response.id)
+    except Exception as e:
         logging.exception("%s: Error while finding monitoring model", repr(monitored_model))
         model_status.failing(f"Failed to find deployed monitoring model in a cluster - {str(e)}")
         TrainingStatusStorage.save_status(model_status)
@@ -165,7 +168,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
                                          outlier_detector.threshold_,
-                                         TresholdCmpOp.LESS)
+                                         ThresholdCmpOp.LESS)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
         logging.exception("%s: Error while MetricSpec creating", repr(monitored_model))

@@ -1,6 +1,5 @@
 from abc import ABC
 from typing import Callable, List
-
 from hydro_serving_grpc.contract import ModelSignature, ModelField
 from hydro_serving_grpc.tf.types_pb2 import *
 from pyod.models.hbos import HBOS
