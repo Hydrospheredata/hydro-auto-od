@@ -12,7 +12,7 @@ import pandas as pd
 from hydro_serving_grpc.contract import ModelField, ModelContract
 from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
-from hydrosdk.modelversion import ModelVersion, LocalModel, DataUploadResponse
+from hydrosdk.modelversion import ModelVersion, LocalModel
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
 from emmv_selection import model_selection
 from s3fs import S3FileSystem
@@ -144,9 +144,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
                                      runtime=DockerImage("hydrosphere/serving-runtime-python-3.6", "2.1.0", None))
 
             logging.info("%s: Uploading monitoring model", repr(monitored_model))
-
-            # ?????? How to process UploadResponse to have id and 
-
             upload_response = local_model.upload(hs_cluster)
             upload_response.lock_till_released()
 
@@ -158,8 +155,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     try:
         # Check that this model is found in the cluster
-
-# ????? Change here so upload_response sends a right version of monitoring model
 
         monitoring_model = ModelVersion.find_by_id(hs_cluster, upload_response.id)
     except Exception as e:
