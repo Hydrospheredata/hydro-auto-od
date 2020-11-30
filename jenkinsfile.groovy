@@ -8,7 +8,7 @@ properties([
    ])
 ])
 
-SERVICENAME = 'hydro-auto-od2'
+SERVICENAME = 'hydro-auto-od'
 SEARCHPATH = './requirements.txt'
 SEARCHSDK = 'hydrosdk'
 SEARCHGRPC = 'hydro-serving-grpc'
