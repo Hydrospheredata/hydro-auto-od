@@ -10,11 +10,6 @@ class TabularOD(ABC):
                          DT_INT8, DT_INT16, DT_INT32, DT_INT64,
                          DT_UINT8, DT_UINT16, DT_UINT32, DT_UINT64}
 
-    @staticmethod
-    def from_id(method_id):
-        if method_id == 1:
-            return AutoHBOS()
-
     @classmethod
     def get_compatible_fields(cls, inputs: List[ModelField]) -> List[ModelField]:
         def is_tensor_compatible(tensor):

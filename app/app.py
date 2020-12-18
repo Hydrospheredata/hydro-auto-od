@@ -14,7 +14,7 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.modelversion import ModelVersion, LocalModel
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
-from emmv_selection import model_selection
+from selection import model_selection
 from s3fs import S3FileSystem
 from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
@@ -61,7 +61,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
     """
     This function:
     1. Downloads training data from S3 into pd.Dataframe
-    2. Uses this training data to train HBOS outlier detection model
+    2. Uses this training data to apply EM-MV method to choose a model
     3. Packs this model into temporary folder, and then into LocalModel
     4. Uploads this LocalModel to the cluster
     5. After this model finishes assembly, attach it as a metric to the monitored model
@@ -100,11 +100,11 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
     # Applying EM-MV
 
-    logging.info("%s: Applying EM-MV", repr(monitored_model))
+    logging.info("%s: Applying MV", repr(monitored_model))
 
-    chosen_model = model_selection(training_data)
-    outlier_detector = chosen_model.recreate(training_data)
+    outlier_detector = model_selection(training_data)
 
+    logging.info(outlier_detector)
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
 
