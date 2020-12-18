@@ -1,8 +1,3 @@
-# Authors: Albert Thomas
-#          Alexandre Gramfort
-# License: BSD (3-clause)
-
-
 import numpy as np
 from sklearn.utils import shuffle as sh
 from sklearn.metrics import auc
@@ -29,11 +24,6 @@ def est_tuning(X_train, X_test, object_list, base_estimator = None,
     _, n_features = X_train.shape
     if n_features < max_features:
         max_features = n_features
-    
-    # Hypercube sampling: sampling uniformly in X_range
-    # Volume of the hypercube enclosing the data
-
-    # offsets_all = np.zeros((len(alphas), len(object_list)))
     auc_est = np.zeros(len(object_list))
     
     for p, object_ in enumerate(object_list):
@@ -63,12 +53,6 @@ def est_tuning(X_train, X_test, object_list, base_estimator = None,
     auc_est /= averaging 
     best_p = np.argmin(auc_est)
     best_ = object_list[best_p]
-
-#     if base_estimator is not None:
-#         clf_est = best_.__class__(**best_)
-#     else:
-#         clf_est = best_
-
     return best_
 
 
@@ -78,6 +62,5 @@ def model_tuning(X, base_estimator=None, parameters=None,
 
     param_grid = ParameterGrid(parameters)
     res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(est_tuning)(X[train], X[test], base_estimator=base_estimator, object_list = param_grid, alphas=alphas, averaging = 10) for train, test in cv.split(X))
-
-#     models = list(list(zip(*res)))
+    
     return res

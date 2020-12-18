@@ -15,7 +15,7 @@
 # 2) Currently candidates are presented by IForest, LOF and OCSVM
 # 3) Hyperparameter is being searched for LOF and IForest only
 # 4) Contamination parameter is assigned to 4%. Except of anomalies
-# this helps to identify poteitla drifts in features or in overall
+# this helps to identify potential drifts in features or in overall
 # data given to a nicely chosen model
 
 
