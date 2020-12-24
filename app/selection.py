@@ -20,12 +20,12 @@
 
 
 
-
 import numpy as np
+import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
-from tuning import model_tuning, est_tuning
+from tuning import model_tuning, high_tuning, low_tuning
 from sklearn.model_selection import train_test_split, ShuffleSplit
 
 
@@ -38,18 +38,18 @@ algo_param = {
 
 def model_selection(X):
     
-    if type(X).__name__ is 'DataFrame':
+    if type(X).__name__ == 'DataFrame':
         X = np.array(X)
 
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
   # Evaluating each model among candidates
     if X.shape[1] <= 5:
-        chosen_model = est_tuning(x_train, x_test, list(models.values()), base_estimator = None,
-                                alphas = np.arange(0.9, 0.99, 0.001), averaging = 1, n_sim = 100000)
+        chosen_model = low_tuning(x_train, x_test, list(models.values()), base_estimator = None,
+                                alphas = np.arange(0.9, 0.99, 0.001))
     else:
-        chosen_model = est_tuning(x_train, x_test, list(models.values()), base_estimator = None,
-                                   alphas = np.arange(0.9, 0.99, 0.001), averaging = 50, n_sim = 100000)
+        chosen_model = high_tuning(x_train, x_test, list(models.values()), base_estimator = None,
+                                   alphas = np.arange(0.9, 0.99, 0.001), averaging = 50)
         
     chosen_model = chosen_model.__class__
     chosen_name = chosen_model.__name__

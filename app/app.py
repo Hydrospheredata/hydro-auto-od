@@ -167,7 +167,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
         logging.info("%s: Creating metric spec", repr(monitored_model))
         # Add monitoring model to the monitored model
         metric_config = MetricSpecConfig(monitoring_model.id,
-                                         outlier_detector.threshold_,
+                                         1.0 - outlier_detector.contamination,
                                          ThresholdCmpOp.LESS)
         MetricSpec.create(hs_cluster, "auto_od_metric", monitored_model.id, metric_config)
     except Exception as e:
