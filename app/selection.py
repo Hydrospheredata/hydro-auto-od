@@ -1,5 +1,5 @@
 # This realization is based in two projects combined to
-# find an optimal modeel together with a hyperparameter
+# find an optimal model together with a hyperparameter
 # Specifically Mass Volume is used to maintain the process
 # Hydro Automatic Outlier Detection
 
@@ -19,9 +19,7 @@
 # data given to a nicely chosen model
 
 
-
 import numpy as np
-import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
@@ -29,18 +27,15 @@ from tuning import model_tuning, high_tuning, low_tuning
 from sklearn.model_selection import train_test_split, ShuffleSplit
 
 
-models = {'IForest': IForest(), 'LOF': LOF(), 'OCSVM': OCSVM()}
+models = {'IForest': IForest, 'LOF': LOF, 'OCSVM': OCSVM}
 
 algo_param = {
     'LOF': {'n_neighbors': np.arange(5,31)},
-    'IForest': {'n_estimators': np.array([20, 50, 100, 150, 200, 250])}
-}
+    'IForest': {'n_estimators': np.array([20, 50, 100, 150, 200, 250])}}
 
 def model_selection(X):
-    
-    if type(X).__name__ == 'DataFrame':
-        X = np.array(X)
 
+    X = np.array(X)
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
   # Evaluating each model among candidates
@@ -50,11 +45,10 @@ def model_selection(X):
     else:
         chosen_model = high_tuning(x_train, x_test, list(models.values()), base_estimator = None,
                                    alphas = np.arange(0.9, 0.99, 0.001), averaging = 50)
-        
-    chosen_model = chosen_model.__class__
+      
+    chosen_class = chosen_model.__class__
     chosen_name = chosen_model.__name__
     
-  
     if chosen_name == 'OCSVM':
         final_model = chosen_model(**{'contamination': 0.04})
     else:

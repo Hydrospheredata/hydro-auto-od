@@ -33,7 +33,7 @@ def low_tuning(X_train, X_test, object_list, base_estimator = None,
         volume_support = sum(np.log1p(x) for x in lim_sup - lim_inf)
     for p, object_ in enumerate(object_list):
         if base_estimator is None:
-            clf = object_
+            clf = object_()
         else:
             clf = base_estimator(**object_)
         vol_p = compute_mv(clf, X_train_, X_test, alphas, lim_inf, 
@@ -62,7 +62,7 @@ def high_tuning(X_train, X_test, object_list, base_estimator = None,
             if volume_support > 0:
                 nb_exp += 1
                 if base_estimator is None:
-                    clf = object_
+                    clf = object_()
                 else:
                     clf = base_estimator(**object_)
                 vol_p = compute_mv(clf, X_train_, X_, alphas, lim_inf, 
