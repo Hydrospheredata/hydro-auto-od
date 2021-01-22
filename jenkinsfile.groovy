@@ -214,44 +214,43 @@ node('hydrocentral') {
             sdkVersion = sh(script: "curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version", returnStdout: true, label: "get sdk version").trim()
           }
         }
-      }
 
-    stage('Test'){
-      if (env.CHANGE_ID != null){
-        buildDocker(REGISTRYURL)
-      }
-    }
-
-    stage('Release'){
-      if (BRANCH_NAME == 'master' || BRANCH_NAME == 'main'){ //Run only manual from master{
-        if (params.releaseType == 'global'){
-            oldVersion = getVersion()
-            bumpVersion(getVersion(),params.newVersion,params.patchVersion,'version')
-            newVersion = getVersion()
-        } else {
-            newVersion = getVersion()
+        stage('Test'){
+          if (env.CHANGE_ID != null){
+            buildDocker(REGISTRYURL)
+          }
         }
-        bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
-        bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
-        buildDocker(REGISTRYURL)
-        pushDocker(REGISTRYURL, SERVICEIMAGENAME+":$newVersion")
-        //Update helm and docker-compose if release 
-        if (params.releaseType == 'global'){
-            releaseService(oldVersion, newVersion)
-        } else {
-            dir('release'){
-                //bump only image tag
-                withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'Githubpassword', usernameVariable: 'Githubusername')]) {
-                git changelog: false, credentialsId: 'HydroRobot_AccessToken', url: "https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git"      
-                updateHelmChart("$newVersion")
-                updateDockerCompose("$newVersion")
-                sh script: "git commit --allow-empty -a -m 'Releasing $SERVICENAME:$newVersion'",label: "commit to git chart repo"
-                sh script: "git push https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git --set-upstream master",label: "push to git"
+
+        stage('Release'){
+          if (BRANCH_NAME == 'master' || BRANCH_NAME == 'main'){ //Run only manual from master{
+            if (params.releaseType == 'global'){
+                oldVersion = getVersion()
+                bumpVersion(getVersion(),params.newVersion,params.patchVersion,'version')
+                newVersion = getVersion()
+            } else {
+                newVersion = getVersion()
+            }
+            bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
+            bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
+            buildDocker(REGISTRYURL)
+            pushDocker(REGISTRYURL, SERVICEIMAGENAME+":$newVersion")
+            //Update helm and docker-compose if release 
+            if (params.releaseType == 'global'){
+                releaseService(oldVersion, newVersion)
+            } else {
+                dir('release'){
+                    //bump only image tag
+                    withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'Githubpassword', usernameVariable: 'Githubusername')]) {
+                    git changelog: false, credentialsId: 'HydroRobot_AccessToken', url: "https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git"      
+                    updateHelmChart("$newVersion")
+                    updateDockerCompose("$newVersion")
+                    sh script: "git commit --allow-empty -a -m 'Releasing $SERVICENAME:$newVersion'",label: "commit to git chart repo"
+                    sh script: "git push https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git --set-upstream master",label: "push to git"
+                    }
                 }
             }
+          }
         }
-      }
-    }
     //post if success
     if (params.releaseType == 'local' && BRANCH_NAME == 'master'){
         slackMessage()
