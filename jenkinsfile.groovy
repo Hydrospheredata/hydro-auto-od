@@ -142,7 +142,7 @@ def buildDocker(String registryUrl){
 
 def pushDocker(String registryUrl){
     //push docker image to registryUrl
-    withCredentials([usernamePassword(credentialsId: 'hydro_harbor_docker_registry', passwordVariable: 'password', usernameVariable: 'username')]) {
+    withCredentials([usernamePassword(credentialsId: 'hydrorobot_docker_creds', passwordVariable: 'password', usernameVariable: 'username')]) {
       sh script: "docker login --username $username --password $password"
       sh script: "docker push $registryUrl/$SERVICEIMAGENAME:$tagVersion",label: "push docker image to registry"
     }
