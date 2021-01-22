@@ -46,7 +46,6 @@ def model_selection(X):
         chosen_model = high_tuning(x_train, x_test, list(models.values()), base_estimator = None,
                                    alphas = np.arange(0.9, 0.99, 0.001), averaging = 50)
       
-    chosen_class = chosen_model.__class__
     chosen_name = chosen_model.__name__
     
     if chosen_name == 'OCSVM':
