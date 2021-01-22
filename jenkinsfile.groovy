@@ -169,8 +169,8 @@ def updateDockerCompose(String newVersion){
 def updateHelmChart(String newVersion){
   dir('helm'){
     //Change template
-    sh script: "sed -i \"s/.*full:.*/  full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" manager/values.yaml", label: "sed $SERVICEIMAGENAME version"
-    sh script: "sed -i \"s/.*serving-manager.*/    full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" dev.yaml", label: "sed $SERVICEIMAGENAME dev stage version"
+    sh script: "sed -i \"s/.*full:.*/  full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" $SERVICEIMAGENAME/values.yaml", label: "sed $SERVICEIMAGENAME version"
+    sh script: "sed -i \"s/.*$SERVICEIMAGENAME.*/    full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" dev.yaml", label: "sed $SERVICEIMAGENAME dev stage version"
 
     //Refresh readme for chart
     sh script: "frigate gen $SERVICEIMAGENAME --no-credits > $SERVICEIMAGENAME/README.md"
@@ -201,8 +201,7 @@ node('hydrocentral') {
       stage('SCM'){
         //Set commit author
         sh script: "git config --global user.name \"HydroRobot\"", label: "Set username"
-        sh script: "git config --global user.email \"robot@hydrosphere.io\"", label: "Set user email"
-        // git changelog: false, credentialsId: 'HydroRobot_AccessToken', poll: false, url: 'https://github.com/Hydrospheredata/hydro-serving-manager.git' 
+        sh script: "git config --global user.email \"robot@hydrosphere.io\"", label: "Set user email" 
         checkoutRepo("https://github.com/Hydrospheredata/$SERVICENAME" + '.git')
         AUTHOR = sh(script:"git log -1 --pretty=format:'%an'", returnStdout: true, label: "get last commit author").trim()
         if (params.grpcVersion == ''){
