@@ -19,7 +19,7 @@ def predict(**kwargs):
 
     x = np.array(fields_values, dtype=float).reshape(1, -1)
 
-    score = od_model.decision_function(x)
+    score = od_model.predict_proba(x, method='unify')[:,1]
 
     metric_value_proto = hs.TensorProto(
         double_val=score.flatten().tolist(),
