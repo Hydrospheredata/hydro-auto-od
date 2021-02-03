@@ -1,14 +1,14 @@
 import numpy as np
-from sklearn.utils import shuffle as sh
 from sklearn.metrics import auc
+from itertools import combinations
 from joblib import Parallel, delayed
+from sklearn.utils import shuffle as sh
 from sklearn.model_selection import ParameterGrid, train_test_split
-
 
 
 def compute_mv(clf, X_train, X_test, alphas, 
                lim_inf, lim_sup, n_sim, features, vol_sup):
-    # Random Unifrom sampling
+    # Random Uniform sampling
     U = np.random.uniform(lim_inf, lim_sup, 
                 size=[n_sim, len(features)])
     # Training classifier
@@ -20,31 +20,35 @@ def compute_mv(clf, X_train, X_test, alphas,
     # compute volumes of associated level sets
     vol_p = (np.array([np.mean(score_U >= offset) for offset in offsets_p]) *
              vol_sup)
-
     return vol_p
 
 def low_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), n_sim = 100000):
-    auc_est = np.zeros(len(object_list))
-    lim_inf = X_test.min(axis=0)
-    lim_sup = X_test.max(axis=0)
-    volume_support = (lim_sup - lim_inf).prod()
-    if volume_support == 0.0:
-        volume_support = sum(np.log1p(x) for x in lim_sup - lim_inf)
-    for p, object_ in enumerate(object_list):
-        if base_estimator is None:
-            clf = object_()
-        else:
-            clf = base_estimator(**object_)
-        vol_p = compute_mv(clf, X_train_, X_test, alphas, lim_inf, 
-                   lim_sup, n_sim, features, volume_support)
-        auc_est[p] = auc(alphas, vol_p)
-    best_p = np.argmin(auc_est)
+    max_features = 5
+    _, n_features = X_train.shape
+    features_list = np.arange(n_features)
+    auc_test = np.zeros(len(object_list))
+    combs = combinations(features_list, max_features)
+    for comb in combs:
+        X_train_ = X_train[:, comb]
+        X_ = X_test[:, comb]
+        lim_inf = X_.min(axis=0)
+        lim_sup = X_.max(axis=0)
+        for p, object_ in enumerate(object_list):
+            volume_support = (lim_sup - lim_inf).prod()
+            if volume_support > 0:
+                if base_estimator is None:
+                    clf = object_()
+                else:
+                    clf = base_estimator(**object_)
+                vol_p = compute_mv(clf, X_train_, X_, alphas, lim_inf, 
+                           lim_sup, n_sim, comb, volume_support)
+                auc_test[p] = auc(alphas, vol_p)
+    auc_test /= len(combs)
+    best_p = np.argmin(auc_test)
     best_ = object_list[best_p]
     return best_
-        
     
-
 def high_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), averaging = 50, n_sim = 100000):
     max_features = 5
@@ -72,7 +76,6 @@ def high_tuning(X_train, X_test, object_list, base_estimator = None,
     best_p = np.argmin(auc_est)
     best_ = object_list[best_p]
     return best_
-
 
 def model_tuning(X, base_estimator=None, parameters=None,
                  cv=None, alphas=np.arange(0.05, 1., 0.05), n_jobs=-1):
