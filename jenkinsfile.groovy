@@ -169,11 +169,11 @@ def updateDockerCompose(String newVersion){
 def updateHelmChart(String newVersion){
   dir('helm'){
     //Change template
-    sh script: "sed -i \"s/.*full:.*/  full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" $SERVICEIMAGENAME/values.yaml", label: "sed $SERVICEIMAGENAME version"
-    sh script: "sed -i \"s/.*$SERVICEIMAGENAME.*/    full: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" dev.yaml", label: "sed $SERVICEIMAGENAME dev stage version"
+    sh script: "sed -i \"s/.*full:.*/  full: hydrosphere\\/${SERVICEIMAGENAME}:$newVersion/g\" ${SERVICEIMAGENAME}/values.yaml", label: "sed ${SERVICEIMAGENAME} version"
+    sh script: "sed -i \"s/.*${SERVICEIMAGENAME}.*/    full: hydrosphere\\/${SERVICEIMAGENAME}:${newVersion}/g\" dev.yaml", label: "sed ${SERVICEIMAGENAME} dev stage version"
 
     //Refresh readme for chart
-    sh script: "frigate gen $SERVICEIMAGENAME --no-credits > $SERVICEIMAGENAME/README.md"
+    sh script: "frigate gen ${SERVICEIMAGENAME} --no-credits > ${SERVICEIMAGENAME}/README.md"
 
     dir('auto-od'){
         sh script: "helm dep up", label: "Dependency update"
@@ -226,11 +226,11 @@ node('hydrocentral') {
                 oldVersion = getVersion()
                 bumpVersion(getVersion(),params.newVersion,params.patchVersion,'version')
                 newVersion = getVersion()
+                bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
+                bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
             } else {
                 newVersion = getVersion()
             }
-            bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
-            bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
             buildDocker(REGISTRYURL)
             pushDocker(REGISTRYURL)
             //Update helm and docker-compose if release 
