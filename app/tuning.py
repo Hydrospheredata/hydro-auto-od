@@ -81,11 +81,11 @@ def model_tuning(X, base_estimator=None, parameters=None,
                  cv=None, alphas=np.arange(0.05, 1., 0.05), n_jobs=-1):
     _, n_features = X.shape
     param_grid = ParameterGrid(parameters)
-    if n_features <= 7:
-        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(low_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                       object_list = param_grid, alphas=alphas, n_sim = 10000) for train, test in cv.split(X))
-    else:
+    if n_features > 5:
         res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(high_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                           object_list = param_grid, alphas=alphas, averaging = 10, n_sim = 10000) for train, test in cv.split(X))
+                                                                   object_list = param_grid, alphas=alphas, averaging = 10, n_sim = 10000) for train, test in cv.split(X))
+    else:
+        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(low_tuning)(X[train], X[test], base_estimator=base_estimator, 
+                                                               object_list = param_grid, alphas=alphas, n_sim = 10000) for train, test in cv.split(X))
     return res
 

@@ -39,7 +39,7 @@ def model_selection(X):
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
   # Evaluating each model among candidates
-    if X.shape[1] <= 7:
+    if X.shape[1] <= 5:
         chosen_model = low_tuning(x_train, x_test, list(models.values()), base_estimator = None,
                                 alphas = np.arange(0.9, 0.99, 0.001))
     else:
