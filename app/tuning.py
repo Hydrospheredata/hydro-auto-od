@@ -24,14 +24,17 @@ def compute_mv(clf, X_train, X_test, alphas,
 
 def low_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), n_sim = 100000):
-    max_features = 5
     _, n_features = X_train.shape
+    if n_features < 5:
+        max_features = n_features
+    else:
+        max_features = 5
     features_list = np.arange(n_features)
     auc_test = np.zeros(len(object_list))
-    combs = combinations(features_list, max_features)
-    for comb in combs:
-        X_train_ = X_train[:, comb]
-        X_ = X_test[:, comb]
+    combs = list(combinations(features_list, max_features))
+    for list_ in combs:
+        X_train_ = X_train[:, list_]
+        X_ = X_test[:, list_]
         lim_inf = X_.min(axis=0)
         lim_sup = X_.max(axis=0)
         for p, object_ in enumerate(object_list):
@@ -42,7 +45,7 @@ def low_tuning(X_train, X_test, object_list, base_estimator = None,
                 else:
                     clf = base_estimator(**object_)
                 vol_p = compute_mv(clf, X_train_, X_, alphas, lim_inf, 
-                           lim_sup, n_sim, comb, volume_support)
+                           lim_sup, n_sim, list_, volume_support)
                 auc_test[p] = auc(alphas, vol_p)
     auc_test /= len(combs)
     best_p = np.argmin(auc_test)
