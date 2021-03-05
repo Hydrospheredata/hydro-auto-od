@@ -22,19 +22,17 @@ def compute_mv(clf, X_train, X_test, alphas,
              vol_sup)
     return vol_p
 
+
 def low_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), n_sim = 100000):
+    max_features = 5
     _, n_features = X_train.shape
-    if n_features < 5:
-        max_features = n_features
-    else:
-        max_features = 5
     features_list = np.arange(n_features)
     auc_test = np.zeros(len(object_list))
-    combs = list(combinations(features_list, max_features))
-    for list_ in combs:
-        X_train_ = X_train[:, list_]
-        X_ = X_test[:, list_]
+    combs = combinations(features_list, max_features)
+    for comb in combs:
+        X_train_ = X_train[:, comb]
+        X_ = X_test[:, comb]
         lim_inf = X_.min(axis=0)
         lim_sup = X_.max(axis=0)
         for p, object_ in enumerate(object_list):
@@ -45,13 +43,14 @@ def low_tuning(X_train, X_test, object_list, base_estimator = None,
                 else:
                     clf = base_estimator(**object_)
                 vol_p = compute_mv(clf, X_train_, X_, alphas, lim_inf, 
-                           lim_sup, n_sim, list_, volume_support)
+                           lim_sup, n_sim, comb, volume_support)
                 auc_test[p] = auc(alphas, vol_p)
     auc_test /= len(combs)
     best_p = np.argmin(auc_test)
     best_ = object_list[best_p]
     return best_
     
+
 def high_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), averaging = 50, n_sim = 100000):
     max_features = 5
@@ -80,17 +79,13 @@ def high_tuning(X_train, X_test, object_list, base_estimator = None,
     best_ = object_list[best_p]
     return best_
 
-def model_tuning(X, base_estimator=None, parameters=None,
-                 cv=None, alphas=np.arange(0.05, 1., 0.05), n_jobs=-1):
-    _, n_features = X.shape
+
+def model_tuning(X_train, X_test, base_estimator=None, parameters=None, alphas=np.arange(0.05, 1., 0.05)):
     param_grid = ParameterGrid(parameters)
+    _, n_features = X_train.shape
     if n_features <= 7:
-        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(low_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                       object_list = param_grid, alphas=alphas, n_sim = 10000) for train, test in cv.split(X))
+        res = low_tuning(X_train, X_test, base_estimator=base_estimator, object_list = param_grid, alphas=alphas, n_sim = 10000) 
     else:
-        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(high_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                                   object_list = param_grid, alphas=alphas, averaging = 10, n_sim = 10000) for train, test in cv.split(X))
+        res = high_tuning(X_train, X_test, base_estimator=base_estimator, object_list = param_grid, averaging = 10, alphas=alphas, n_sim = 10000) 
     return res
-
-
 
