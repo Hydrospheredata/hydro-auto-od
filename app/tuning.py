@@ -22,6 +22,7 @@ def compute_mv(clf, X_train, X_test, alphas,
              vol_sup)
     return vol_p
 
+
 def low_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), n_sim = 100000):
     max_features = 5
@@ -49,6 +50,7 @@ def low_tuning(X_train, X_test, object_list, base_estimator = None,
     best_ = object_list[best_p]
     return best_
     
+
 def high_tuning(X_train, X_test, object_list, base_estimator = None, 
                alphas=np.arange(0.05, 1., 0.05), averaging = 50, n_sim = 100000):
     max_features = 5
@@ -77,15 +79,13 @@ def high_tuning(X_train, X_test, object_list, base_estimator = None,
     best_ = object_list[best_p]
     return best_
 
-def model_tuning(X, base_estimator=None, parameters=None,
-                 cv=None, alphas=np.arange(0.05, 1., 0.05), n_jobs=-1):
-    _, n_features = X.shape
+
+def model_tuning(X_train, X_test, base_estimator=None, parameters=None, alphas=np.arange(0.05, 1., 0.05)):
     param_grid = ParameterGrid(parameters)
-    if n_features > 5:
-        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(high_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                                   object_list = param_grid, alphas=alphas, averaging = 10, n_sim = 10000) for train, test in cv.split(X))
+    _, n_features = X_train.shape
+    if n_features <= 7:
+        res = low_tuning(X_train, X_test, base_estimator=base_estimator, object_list = param_grid, alphas=alphas, n_sim = 10000) 
     else:
-        res = Parallel(n_jobs=n_jobs, verbose=10)(delayed(low_tuning)(X[train], X[test], base_estimator=base_estimator, 
-                                                               object_list = param_grid, alphas=alphas, n_sim = 10000) for train, test in cv.split(X))
+        res = high_tuning(X_train, X_test, base_estimator=base_estimator, object_list = param_grid, averaging = 10, alphas=alphas, n_sim = 10000) 
     return res
 
