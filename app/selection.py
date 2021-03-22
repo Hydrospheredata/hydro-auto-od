@@ -39,7 +39,7 @@ def model_selection(X):
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
   # Evaluating each model among candidates
-    if X.shape[1] <= 7:
+    if X.shape[1] <= 5:
         chosen_model = low_tuning(x_train, x_test, list(models.values()), base_estimator = None,
                                 alphas = np.arange(0.9, 0.99, 0.001))
     else:
@@ -51,13 +51,34 @@ def model_selection(X):
     if chosen_name == 'OCSVM':
         final_model = chosen_model(**{'contamination': 0.04})
     else:
+
         # Choosing hyperparameter
         parameters = algo_param[chosen_name]
-        chosen_params = model_tuning(x_train, x_test, base_estimator = chosen_model,
-                                parameters = parameters, alphas=np.arange(0.05, 1., 0.05))
-        chosen_params['contamination'] = 0.04
-        final_model= chosen_model(**chosen_params)
+        param_name = list(parameters.keys())[0]
+        cv = ShuffleSplit(n_splits=10, test_size=0.2)
+        chosen_params = model_tuning(X = X, base_estimator = chosen_model,
+                                parameters = parameters, cv = cv)
+        counts_values = np.unique(list(i[param_name] for i in chosen_params), return_counts = True)
+        hyperparam = counts_values[0][np.argmax(counts_values[1])]
+        fin_param = {param_name: hyperparam, 'contamination': 0.04}
+        final_model = chosen_model(**fin_param)
 
     final_model.fit(X)
     
     return final_model
+    
+
+def wait(response, retry=12, sleep=30):
+    """
+    Wait till data processing gets finished. 
+    :param retry: Number of retries before giving up waiting.
+    :param sleep: Sleep interval between retries.
+    """
+    try:
+        response.lock_till_released(sleep)
+    except TimeoutException as e:
+        if retry == 0:
+            raise e
+        else:
+            wait(response, retry-1, sleep*2)
+

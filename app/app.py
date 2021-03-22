@@ -14,8 +14,8 @@ from hydrosdk.cluster import Cluster
 from hydrosdk.image import DockerImage
 from hydrosdk.modelversion import ModelVersion, LocalModel
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
-from selection import model_selection
-from s3fs import S3FileSystem
+from selection import model_selection, wait
+from hydrosdk.exceptions import TimeoutException
 from tabular_od_methods import TabularOD
 from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
 from utils import get_monitoring_signature_from_monitored_signature, DTYPE_TO_NAMES
@@ -145,7 +145,10 @@ def train_and_deploy_monitoring_model(monitored_model_version_id, training_data_
 
             logging.info("%s: Uploading monitoring model", repr(monitored_model))
             upload_response = local_model.upload(hs_cluster)
-            upload_response.lock_till_released()
+            # try:
+            #     upload_response.lock_till_released()
+            # except TimeoutException as e:
+            wait(upload_response)
 
     except Exception as e:
         logging.exception("%s: Error while uploading monitoring model", repr(monitored_model))
