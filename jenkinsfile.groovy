@@ -4,7 +4,7 @@ properties([
     string(defaultValue:'', description: 'Force set newVersion x.x.x.x or leave empty', name: 'newVersion', trim: false),
     string(defaultValue:'', description: 'Set grpcVersion or leave empty', name: 'grpcVersion', trim: false),
     string(defaultValue:'', description: 'Set sdkVersion or leave empty', name: 'sdkVersion', trim: false),
-    choice(choices: ['local', 'global'], name: 'release', description: 'It\'s local release or global?'),
+    choice(choices: ['local', 'global'], name: 'releaseType', description: 'It\'s local release or global?'),
    ])
 ])
 
@@ -13,8 +13,8 @@ SEARCHPATH = './requirements.txt'
 SEARCHSDK = 'hydrosdk'
 SEARCHGRPC = 'hydro-serving-grpc'
 TESTCMD = 'sbt --batch test'
-REGISTRYURL = 'harbor.hydrosphere.io/hydro-serving'
-SERVICEIMAGENAME = 'hydro-auto-od'
+REGISTRYURL = 'hydrosphere'
+SERVICEIMAGENAME = 'auto-od'
 
 def checkoutRepo(String repo){
   git changelog: false, credentialsId: 'HydroRobot_AccessToken', poll: false, url: repo
@@ -22,16 +22,73 @@ def checkoutRepo(String repo){
 
 def getVersion(){
     try{
-        //remove only quotes and spaces
+      if (params.releaseType == 'global'){
+        //remove only quotes
         version = sh(script: "cat \"version\" | sed 's/\\\"/\\\\\"/g'", returnStdout: true ,label: "get version").trim()
+      } else {
+        //Set version as commit SHA
+        version = sh(script: "git rev-parse HEAD", returnStdout: true ,label: "get version").trim()
+      }
         return version
-    }catch(e){
-        return "file " + stage + "/version not found" 
+    }catch(err){
+        return "$err" 
+    }
+}
+
+def slackMessage(){
+    withCredentials([string(credentialsId: 'slack_message_url', variable: 'slack_url')]) {
+    //beautiful block
+      def json = """
+{
+	"blocks": [
+		{
+			"type": "header",
+			"text": {
+				"type": "plain_text",
+				"text": "$SERVICENAME: release - ${currentBuild.currentResult}!",
+				"emoji": true
+			}
+		},
+		{
+			"type": "section",
+			"block_id": "section567",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Build info:\n    Project: $JOB_NAME\n    Author: $AUTHOR\n    SHA: $newVersion"
+			},
+			"accessory": {
+				"type": "image",
+				"image_url": "https://res-5.cloudinary.com/crunchbase-production/image/upload/c_lpad,h_170,w_170,f_auto,b_white,q_auto:eco/oxpejnx8k2ixo0bhfsbo",
+				"alt_text": "Hydrospere loves you!"
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "You can see the assembly details by clicking on the button"
+			},
+			"accessory": {
+				"type": "button",
+				"text": {
+					"type": "plain_text",
+					"text": "Details",
+					"emoji": true
+				},
+				"value": "Details",
+				"url": "${env.BUILD_URL}",
+				"action_id": "button-action"
+			}
+		}
+	]
+}
+"""
+    //Send message
+        sh label:"send slack message",script:"curl -X POST \"$slack_url\" -H \"Content-type: application/json\" --data '${json}'"
     }
 }
 
 def bumpVersion(String currentVersion,String newVersion, String patch, String path){
-
     sh script: """cat <<EOF> ${WORKSPACE}/bumpversion.cfg
 [bumpversion]
 current_version = 0.0.0
@@ -58,38 +115,36 @@ def bumpGrpc(String newVersion, String search, String patch, String path){
     sh script: "rm -rf tmp", label: "Remove temp file"
 }
 
-//Команды для запуска тестов (каждой репе своя?)
+//Run test
 def runTest(){
   sh script: "$TESTCMD", label: "Run test task"
 }
 
-//Релиз сервисов, создаем коммиты и теги в гите
+//Create github release
 def releaseService(String xVersion, String yVersion){
   withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'password', usernameVariable: 'username')]) {
-        //Set global git
-      sh script: "git config --global user.name \"$username\"",label: "Set global username git"
-      sh script: "git config --global user.email \"$username@provectus.com\"",label: "Set global email git"
+      //Set global git
       sh script: "git diff", label: "show diff"
-      sh script: "git add .", label: "add all file to commit"
-      sh script: "git commit -m 'Bump to $yVersion'", label: "commit to git"
+      sh script: "git commit -a -m 'Bump to $yVersion'", label: "commit to git"
       sh script: "git push --set-upstream origin master", label: "push all file to git"
       sh script: "git tag -a $yVersion -m 'Bump $xVersion to $yVersion version'",label: "set git tag"
       sh script: "git push --set-upstream origin master --tags",label: "push tag and create release"
+      //Create release from tag
+      sh script: "curl -X POST -H \"Accept: application/vnd.github.v3+json\" -H \"Authorization: token ${password}\" https://api.github.com/repos/Hydrospheredata/${SERVICENAME}/releases -d '{\"tag_name\":\"${yVersion}\",\"name\": \"${yVersion}\",\"body\": \"Bump to ${yVersion}\",\"draft\": false,\"prerelease\": false}'"
   }
 }
 
-def buildDocker(){
+def buildDocker(String registryUrl){
     //run build command and store build tag 
-    newVersion = getVersion() 
-    sh script: "docker build -t hydrosphere/$SERVICEIMAGENAME:$newVersion .", label: "Run build docker task";
+    tagVersion = getVersion() 
+    sh script: "docker build -t $registryUrl/$SERVICEIMAGENAME:$tagVersion .", label: "Run build docker task";
 }
 
-def pushDocker(String registryUrl, String dockerImage){
+def pushDocker(String registryUrl){
     //push docker image to registryUrl
-    withCredentials([usernamePassword(credentialsId: 'hydro_harbor_docker_registry', passwordVariable: 'password', usernameVariable: 'username')]) {
-      sh script: "docker login --username $username --password $password $registryUrl"
-      sh script: "docker tag hydrosphere/$dockerImage $registryUrl/$dockerImage",label: "set tag to docker image"
-      sh script: "docker push $registryUrl/$dockerImage",label: "push docker image to registry"
+    withCredentials([usernamePassword(credentialsId: 'hydrorobot_docker_creds', passwordVariable: 'password', usernameVariable: 'username')]) {
+      sh script: "docker login --username $username --password $password"
+      sh script: "docker push $registryUrl/$SERVICEIMAGENAME:$tagVersion",label: "push docker image to registry"
     }
 }
 
@@ -97,7 +152,7 @@ def pushDocker(String registryUrl, String dockerImage){
 def updateDockerCompose(String newVersion){
   dir('docker-compose'){
     //Change template
-    sh script: "sed \"s/.*image:.*/    image: $REGISTRYURL\\/$SERVICEIMAGENAME:$newVersion/g\" ${SERVICEIMAGENAME}.service.template > ${SERVICEIMAGENAME}.compose", label: "sed $SERVICEIMAGENAME version"
+    sh script: "sed \"s/.*image:.*/    image: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" ${SERVICENAME}.service.template > ${SERVICENAME}.compose", label: "sed $SERVICENAME version"
     //Merge compose into 1 file
     composeMerge = "docker-compose"
     composeService = sh label: "Get all template", returnStdout: true, script: "ls *.compose"
@@ -113,17 +168,14 @@ def updateDockerCompose(String newVersion){
 
 def updateHelmChart(String newVersion){
   dir('helm'){
-    //Bump hydroservingversion
-    sh script: "echo $hydroServingVersion > ../version"
-    bumpVersion(hydroServingVersion, "", 'patch', '../version')
-    newhydroServingVersion = sh(returnStdout: true, script: "cat ../version").trim()
     //Change template
-    sh script: "sed -i \"s/.*full:.*/  full: $REGISTRYURL\\/$SERVICEIMAGENAME:$newVersion/g\" auto-od/values.yaml", label: "sed $SERVICEIMAGENAME version"
+    sh script: "sed -i \"s/.*full:.*/  full: hydrosphere\\/${SERVICEIMAGENAME}:$newVersion/g\" ${SERVICEIMAGENAME}/values.yaml", label: "sed ${SERVICEIMAGENAME} version"
+    sh script: "sed -i \"s/.*${SERVICEIMAGENAME}.*/    full: hydrosphere\\/${SERVICEIMAGENAME}:${newVersion}/g\" dev.yaml", label: "sed ${SERVICEIMAGENAME} dev stage version"
 
     //Refresh readme for chart
-    sh script: "frigate gen auto-od --no-credits > auto-od/README.md"
+    sh script: "frigate gen ${SERVICEIMAGENAME} --no-credits > ${SERVICEIMAGENAME}/README.md"
 
-     dir('auto-od'){
+    dir('auto-od'){
         sh script: "helm dep up", label: "Dependency update"
         sh script: "helm lint .", label: "Lint auto-od chart"
         sh script: "helm template -n serving --namespace hydrosphere . > test.yaml", label: "save template to file"
@@ -140,63 +192,74 @@ def updateHelmChart(String newVersion){
         sh script: "polaris audit --audit-path test.yaml -f score", label: "get polaris score"
         sh script: "rm -rf test.yaml", label: "remove test.yaml"
     }
-
-    sh script: "helm package --dependency-update --version $newhydroServingVersion serving", label: "Pack serving chart"
-    def releaseFile = "serving-${newhydroServingVersion}.tgz"
-    def sha = sh(script: "shasum -a 256 -b ${releaseFile} | awk '{ print \$1 }'", returnStdout: true).trim()
-    def sedCommand = "'s/[0-9]+\\.[0-9]+\\.[0-9]+\\/serving-[0-9]+\\.[0-9]+\\.[0-9]+\\.tgz/${newhydroServingVersion}\\/serving-${newhydroServingVersion}.tgz/g'"
-    sh script: "sed -i 'README.md' -E -e ${sedCommand} README.md" //TODO: Need use frigate for update readme
-    sh script: "./add_version.sh $newhydroServingVersion ${sha}"
   }
 }
 
 
 node('hydrocentral') {
-    stage('SCM'){ 
-      checkoutRepo("https://github.com/provectus/$SERVICENAME" + '.git')
-      if (params.grpcVersion == ''){
-          //Set grpcVersion
-          grpcVersion = sh(script: "curl -Ls https://pypi.org/pypi/hydro-serving-grpc/json | jq -r .info.version", returnStdout: true, label: "get grpc version").trim()
-        }
-      if (params.sdkVersion == ''){
-          //Set sdkVersion
-          sdkVersion = sh(script: "curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version", returnStdout: true, label: "get sdk version").trim()
-        }
-      withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'Githubpassword', usernameVariable: 'Githubusername')]) {
-        //Get Hydro-serving version
-        hydroServingVersion = sh(script: "git ls-remote --tags --sort='v:refname' --refs 'https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git' | sed \"s/.*\\///\" | grep -v \"[a-z]\" | tail -n1", returnStdout: true, label: "get global hydrosphere version").trim()
-      }
-    }
-
-    stage('Test'){
-      if (env.CHANGE_ID != null){
-        //runTest()
-        buildDocker()
-      }
-    }
-
-    stage('Release'){
-      if (BRANCH_NAME == 'master' || BRANCH_NAME == 'main'){
-        oldVersion = getVersion()
-        bumpVersion(getVersion(),params.newVersion,params.patchVersion,'version')
-        newVersion = getVersion()
-        bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
-        bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
-        buildDocker()
-        pushDocker(REGISTRYURL, SERVICEIMAGENAME+":$newVersion")
-        releaseService(oldVersion, newVersion)
-        // Release
-        if (params.release == 'local'){
-        dir('release'){
-          withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'Githubpassword', usernameVariable: 'Githubusername')]) {
-            git changelog: false, credentialsId: 'HydroRobot_AccessToken', url: "https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git"      
-            updateHelmChart("$newVersion")
-            updateDockerCompose("$newVersion")
-            sh script: "git commit --allow-empty -a -m 'Releasing $SERVICENAME:$newVersion'",label: "commit to git chart repo"
-            sh script: "git push https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git --set-upstream master",label: "push to git"
+    try {
+      stage('SCM'){
+        //Set commit author
+        sh script: "git config --global user.name \"HydroRobot\"", label: "Set username"
+        sh script: "git config --global user.email \"robot@hydrosphere.io\"", label: "Set user email" 
+        checkoutRepo("https://github.com/Hydrospheredata/$SERVICENAME" + '.git')
+        AUTHOR = sh(script:"git log -1 --pretty=format:'%an'", returnStdout: true, label: "get last commit author").trim()
+        if (params.grpcVersion == ''){
+            //Set grpcVersion
+            grpcVersion = sh(script: "curl -Ls https://pypi.org/pypi/hydro-serving-grpc/json | jq -r .info.version", returnStdout: true, label: "get grpc version").trim()
+          }
+        if (params.sdkVersion == ''){
+            //Set sdkVersion
+            sdkVersion = sh(script: "curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version", returnStdout: true, label: "get sdk version").trim()
           }
         }
+
+        stage('Test'){
+          if (env.CHANGE_ID != null){
+            buildDocker(REGISTRYURL)
+          }
         }
-      }
+
+        stage('Release'){
+          if (BRANCH_NAME == 'master' || BRANCH_NAME == 'main'){ //Run only manual from master{
+            if (params.releaseType == 'global'){
+                oldVersion = getVersion()
+                bumpVersion(getVersion(),params.newVersion,params.patchVersion,'version')
+                newVersion = getVersion()
+                bumpGrpc(sdkVersion,SEARCHSDK, params.patchVersion,SEARCHPATH) 
+                bumpGrpc(grpcVersion,SEARCHGRPC, params.patchVersion,SEARCHPATH)
+            } else {
+                newVersion = getVersion()
+            }
+            buildDocker(REGISTRYURL)
+            pushDocker(REGISTRYURL)
+            //Update helm and docker-compose if release 
+            if (params.releaseType == 'global'){
+                releaseService(oldVersion, newVersion)
+            } else {
+                dir('release'){
+                    //bump only image tag
+                    withCredentials([usernamePassword(credentialsId: 'HydroRobot_AccessToken', passwordVariable: 'Githubpassword', usernameVariable: 'Githubusername')]) {
+                    git changelog: false, credentialsId: 'HydroRobot_AccessToken', url: "https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git"      
+                    updateHelmChart("$newVersion")
+                    updateDockerCompose("$newVersion")
+                    sh script: "git commit --allow-empty -a -m 'Releasing $SERVICENAME:$newVersion'",label: "commit to git chart repo"
+                    sh script: "git push https://$Githubusername:$Githubpassword@github.com/Hydrospheredata/hydro-serving.git --set-upstream master",label: "push to git"
+                    }
+                }
+            }
+          }
+        }
+    //post if success
+    if (params.releaseType == 'local' && BRANCH_NAME == 'master'){
+        slackMessage()
     }
+  } catch (e) {
+  //post if failure
+    currentBuild.result = 'FAILURE'
+    if (params.releaseType == 'local' && BRANCH_NAME == 'master'){
+        slackMessage()
+    }
+      throw e
+  }
 }

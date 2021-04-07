@@ -3,7 +3,7 @@ pymongo~=3.8.0
 joblib~=0.14.1
 pandas~=1.0.1
 numpy~=1.18.3
-pyod~=0.8.1
+pyod==0.8.5
 grpcio~=1.28.1
 grpcio-health-checking~=1.28.1
 hydro-serving-grpc~=2.4.0
