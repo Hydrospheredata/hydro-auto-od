@@ -20,12 +20,12 @@ from hydrosdk.image import DockerImage
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
 from hydro_serving_grpc.serving.contract.field_pb2 import ModelField
 
-from app.config import DEFAULT_RUNTIME
-from app.selection import model_selection
-from app.utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
-from app.tabular_od_methods import TabularOD
-from app.training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
-from app.config import CLUSTER_ENDPOINT, S3_ENDPOINT, DEFAULT_RUNTIME, DEFAULT_TIMEOUT
+from config import DEFAULT_RUNTIME
+from utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
+from selection import model_selection
+from tabular_od_methods import TabularOD
+from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
+from config import CLUSTER_ENDPOINT, S3_ENDPOINT, DEFAULT_RUNTIME, DEFAULT_TIMEOUT
 
 
 hs_cluster = Cluster(CLUSTER_ENDPOINT)

@@ -5,7 +5,7 @@ from typing import Optional
 
 from pymongo import MongoClient
 from pymongo.database import Database, Collection
-from app.config import MONGO_AUTH_DB, MONGO_DB, MONGO_PASS, MONGO_PORT, MONGO_URL, MONGO_USER
+from config import MONGO_AUTH_DB, MONGO_DB, MONGO_PASS, MONGO_PORT, MONGO_URL, MONGO_USER
 
 
 class AutoODMethodStatuses(Enum):

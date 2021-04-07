@@ -6,7 +6,7 @@ from concurrent import futures
 import grpc
 from hydro_serving_grpc.monitoring.auto_od.api_pb2 import (
     ModelStatusRequest, ModelStatusResponse, LaunchAutoOdRequest,
-    LaunchAutoOdResponse, AutoODState
+    LaunchAutoOdResponse
 )
 from hydro_serving_grpc.monitoring.auto_od.api_pb2_grpc import (
     AutoOdServiceServicer, add_AutoOdServiceServicer_to_server
@@ -16,9 +16,9 @@ from grpc_health.v1.health_pb2 import HealthCheckResponse
 from grpc_health.v1.health_pb2_grpc import HealthServicer
 from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server
 
-from app.main import process_auto_metric_request
-from app.config import GRPC_PORT
-from app.training_status_storage import TrainingStatusStorage
+from config import GRPC_PORT
+from main import process_auto_metric_request
+from training_status_storage import TrainingStatusStorage
 
 fileConfig("resources/logging_config.ini")
 
@@ -28,12 +28,12 @@ class AutoODServiceServicer(AutoOdServiceServicer, HealthServicer):
         model_status = TrainingStatusStorage.find_by_model_version_id(request.model_version_id)
         if model_status is not None:
             return ModelStatusResponse(
-                state=AutoODState.Value(model_status.state),
+                state=ModelStatusResponse.AutoODState.Value(model_status.state),
                 description=model_status.description
             )
         else:
             return ModelStatusResponse(
-                state=AutoODState.PENDING,
+                state=ModelStatusResponse.AutoODState.PENDING,
                 description=f"Training job for modelversion_id={request.model_version_id} was never requested."
             )
 
