@@ -115,7 +115,7 @@ def bumpGrpc(String newVersion, String search, String patch, String path){
     sh script: "rm -rf tmp", label: "Remove temp file"
 }
 
-//Команды для запуска тестов (каждой репе своя?)
+//Run test
 def runTest(){
   sh script: "$TESTCMD", label: "Run test task"
 }
