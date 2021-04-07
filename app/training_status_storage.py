@@ -5,13 +5,7 @@ from typing import Optional
 
 from pymongo import MongoClient
 from pymongo.database import Database, Collection
-
-MONGO_URL = os.getenv("MONGO_URL", "localhost")
-MONGO_PORT = int(os.getenv("MONGO_PORT", 27017))
-MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-AUTO_OD_DB_NAME = os.getenv("AUTO_OD_DB_NAME", "auto_od")
+from app.config import MONGO_AUTH_DB, MONGO_DB, MONGO_PASS, MONGO_PORT, MONGO_URL, MONGO_USER
 
 
 class AutoODMethodStatuses(Enum):
@@ -56,7 +50,7 @@ class TrainingStatusStorage:
 
     @staticmethod
     def __db() -> Database:
-        return TrainingStatusStorage.__get_mongo_client()[AUTO_OD_DB_NAME]
+        return TrainingStatusStorage.__get_mongo_client()[MONGO_DB]
 
     @staticmethod
     def __collection() -> Collection:
@@ -68,10 +62,10 @@ class TrainingStatusStorage:
         if status_document is None:
             return None
         return TrainingStatus(
-            status_document.get("model_version_id"),
-            status_document.get("training_data_path"),
-            AutoODMethodStatuses(status_document.get("state")),
-            status_document.get("description")
+            model_version_id=status_document.get("model_version_id"),
+            training_data_path=status_document.get("training_data_path"),
+            state=AutoODMethodStatuses(status_document.get("state")),
+            description=status_document.get("description"),
         )
 
     @staticmethod

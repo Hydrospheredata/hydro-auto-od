@@ -20,44 +20,42 @@
 
 
 import numpy as np
+import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
-from tuning import model_tuning, high_tuning, low_tuning
+from app.tuning import model_tuning, high_tuning, low_tuning
 from sklearn.model_selection import train_test_split, ShuffleSplit
 
 
 models = {'IForest': IForest, 'LOF': LOF, 'OCSVM': OCSVM}
-
 algo_param = {
     'LOF': {'n_neighbors': np.arange(5,31)},
-    'IForest': {'n_estimators': np.array([20, 50, 100, 150, 200, 250])}}
+    'IForest': {'n_estimators': np.array([20, 50, 100, 150, 200, 250])},
+}
 
-def model_selection(X):
-
-    X = np.array(X)
+def model_selection(data: pd.DataFrame):
+    X = np.array(data)
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
-  # Evaluating each model among candidates
+    # Evaluating each model among candidates
     if X.shape[1] <= 7:
-        chosen_model = low_tuning(x_train, x_test, list(models.values()), base_estimator = None,
-                                alphas = np.arange(0.9, 0.99, 0.001))
+        chosen_model = low_tuning(x_train, x_test, list(models.values()), base_estimator=None,
+                                  alphas=np.arange(0.9, 0.99, 0.001))
     else:
-        chosen_model = high_tuning(x_train, x_test, list(models.values()), base_estimator = None,
-                                   alphas = np.arange(0.9, 0.99, 0.001), averaging = 50)
+        chosen_model = high_tuning(x_train, x_test, list(models.values()), base_estimator=None,
+                                   alphas=np.arange(0.9, 0.99, 0.001), averaging=50)
       
     chosen_name = chosen_model.__name__
-    
     if chosen_name == 'OCSVM':
         final_model = chosen_model(**{'contamination': 0.04})
     else:
         # Choosing hyperparameter
         parameters = algo_param[chosen_name]
-        chosen_params = model_tuning(x_train, x_test, base_estimator = chosen_model,
-                                parameters = parameters, alphas=np.arange(0.05, 1., 0.05))
+        chosen_params = model_tuning(x_train, x_test, base_estimator=chosen_model,
+                                     parameters=parameters, alphas=np.arange(0.05, 1., 0.05))
         chosen_params['contamination'] = 0.04
         final_model= chosen_model(**chosen_params)
 
     final_model.fit(X)
-    
     return final_model
