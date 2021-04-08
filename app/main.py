@@ -32,28 +32,31 @@ hs_cluster = Cluster(CLUSTER_ENDPOINT)
 
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
-    logging.info("Started processing auto-od request for modelversion_id=(%d)", monitored_model_version_id)
+    logging.info("Started processing auto-od request for modelversion_id=%d", monitored_model_version_id)
 
     try:
         model_version = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
     except BadRequestException as e:
         logging.error(f"{str(e)}")
-        return 400, f"Model id={monitored_model_version_id} not found"
+        return 400, f"Model with modelversion_id={monitored_model_version_id} is not found"
 
     if TrainingStatusStorage.find_by_model_version_id(monitored_model_version_id) is not None:
-        logging.info("%s: a training job is already requested", repr(model_version))
+        logging.info("A training job is already requested for modelversion_id=%d", monitored_model_version_id)
         return 409, f"A training job is already requested for modelversion_id={monitored_model_version_id}"
 
     if TabularOD.supports_signature(model_version.signature):
         p = Process(target=train_and_deploy_monitoring_model,
                     args=(monitored_model_version_id, training_data_path))
         p.start()
-        logging.info("%s: created a training job", repr(model_version))
-        return 202, f"Started a training job"
+        logging.info("Started a training job for modelversion_id=%d", monitored_model_version_id)
+        return 202, f"Started a training job for modelversion_id={monitored_model_version_id}"
     else:
-        logging.info("%s: signature is not supported", monitored_model_version_id)
-        description = ("There are 0 supported fields in this model signature. "
-                "To see how you can support AutoOD metric refer to the documentation.")
+        logging.warning(
+            "Signature of modelversion_id=%d is not supported for creating auto-od metric, aborting", 
+            monitored_model_version_id)
+        description = (
+            "There are 0 supported fields in this model signature. To see how you can support "
+            "AutoOD metric refer to the documentation.")
         model_status = TrainingStatus(
             model_version_id=monitored_model_version_id, 
             training_data_path=training_data_path, 
@@ -96,26 +99,30 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     )
     TrainingStatusStorage.save_status(model_status)
 
-    logging.info("Getting monitored model (%d)", monitored_model_version_id)
+    logging.info("Retrieving monitored model modelversion_id=%d", monitored_model_version_id)
     monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
 
     supported_input_fields = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
     supported_output_fields = TabularOD.get_compatible_fields(monitored_model.signature.outputs)
     supported_fields: List[ModelField] = supported_input_fields + supported_output_fields
     supported_fields_names: List[str] = [field.name for field in supported_fields]
-    supported_fields_dtypes: List[str] = [field.dtype for field in supported_fields]
 
-    logging.info("%s: reading training data from %s", repr(monitored_model), training_data_path)
+    logging.info(
+        "Reading training data from %s for modelversion_id=%d", 
+        training_data_path, monitored_model_version_id)
     if S3_ENDPOINT:
         s3 = S3FileSystem(client_kwargs={'endpoint_url': S3_ENDPOINT})
         training_data = pd.read_csv(s3.open(training_data_path, mode='rb', names=supported_fields_names))
     else:
         training_data = pd.read_csv(training_data_path, names=supported_fields_names)
 
-    logging.info("%s: running outlier model selection algorithm", repr(monitored_model))
+    logging.info(
+        "Running outlier model selection algorithm for modelversion_id=%d", monitored_model_version_id)
     outlier_detector = model_selection(training_data)
 
-    logging.info("%s: selected an outlier model: %s", repr(monitored_model), repr(outlier_detector))
+    logging.info(
+        "Selected an outlier model=%s for modelversion_id=%d", 
+        repr(outlier_detector), monitored_model_version_id)
     model_status.deploying("Uploading metric to the cluster")
     TrainingStatusStorage.save_status(model_status)
 
@@ -148,43 +155,48 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
                 }) \
                 .with_install_command("pip install -r requirements.txt")
             
-            logging.info("%s: uploading a monitoring model", repr(monitored_model))
+            logging.info("Uploading a monitoring model for modelversion_id=%d", monitored_model_version_id)
             model_version = model_version_builder.build(hs_cluster)
 
         upload_model_with_circuit_breaker(model_version, timeout=DEFAULT_TIMEOUT)
 
     except TimeoutException as e:
-        logging.error("%s: timed out waiting for monitoring model (%s) to build", repr(monitored_model), repr(model_version))
+        logging.error(
+            "Timed out waiting for the outlier detector with modelversion_id=%d to build for "
+            "the base model with modelversion_id=%d", model_version.id, monitored_model.id)
         model_status.failing("Monitoring model timed out during model build")
         TrainingStatusStorage.save_status(model_status)
         return -1
     
     except ModelVersion.ReleaseFailed as e:
-        logging.error("%s: monitoring model (%s) failed to build", repr(monitored_model), repr(model_version))
+        logging.error(
+            "Outlier detector with modelversion_id=%d failed to build for "
+            "the base model with modelversion_id=%d", model_version.id, monitored_model.id)
         model_status.failing("Monitoring model failed to build")
         TrainingStatusStorage.save_status(model_status)
         return -1
         
     except Exception as e:
-        logging.exception("%s: error occurred while uploading a monitoring model: %s", repr(monitored_model), e)
+        logging.exception("Error occurred while uploading an outlier detector for modelversion_id=%d: %s", monitored_model.id, e)
         model_status.failing(f"Failed to pack & deploy monitoring model to a cluster due to: {str(e)}")
         TrainingStatusStorage.save_status(model_status)
         return -1
 
     try:
-        logging.info("%s: assigning monitoring model (%s) as metric", repr(monitored_model), repr(model_version))
+        logging.info(
+            "Assigning the outlier detector with modelversion_id=%d to the base model with "
+            "modelversion_id=%d as metric", model_version.id, monitored_model.id)
         metric = model_version.as_metric(
             threshold=1.0-outlier_detector.contamination, 
-            comparator=ThresholdCmpOp.LESS
-        )
+            comparator=ThresholdCmpOp.LESS)
         monitored_model.assign_metrics([metric])
     except Exception as e:
-        logging.exception("%s: error while assigning monitoring metric", repr(monitored_model))
+        logging.exception("Error occurred while assigning monitoring metric for modelversion_id=%d", monitored_model.id)
         model_status.failing(f"Failed to assign monitoring metrics to the model")
         TrainingStatusStorage.save_status(model_status)
         return -1
 
     model_status.success()
     TrainingStatusStorage.save_status(model_status)
-    logging.info("%s: done", repr(monitored_model))
+    logging.info("Finished creating an outlier detector for modelversion_id=%d", monitored_model.id)
     return 1

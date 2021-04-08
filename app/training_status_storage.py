@@ -64,7 +64,7 @@ class TrainingStatusStorage:
         return TrainingStatus(
             model_version_id=status_document.get("model_version_id"),
             training_data_path=status_document.get("training_data_path"),
-            state=AutoODMethodStatuses(status_document.get("state")),
+            state=AutoODMethodStatuses(status_document.get("status")),
             description=status_document.get("description"),
         )
 

@@ -29,8 +29,8 @@ def low_tuning(X_train, X_test, object_list, base_estimator = None,
     _, n_features = X_train.shape
     features_list = np.arange(n_features)
     auc_test = np.zeros(len(object_list))
-    combs = combinations(features_list, max_features)
-    for comb in combs:
+    combs = list(combinations(features_list, max_features))
+    for i, comb in enumerate(combs):
         X_train_ = X_train[:, comb]
         X_ = X_test[:, comb]
         lim_inf = X_.min(axis=0)
