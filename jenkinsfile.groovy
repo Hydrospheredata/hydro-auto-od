@@ -17,7 +17,11 @@ REGISTRYURL = 'hydrosphere'
 SERVICEIMAGENAME = 'auto-od'
 
 def checkoutRepo(String repo){
-  git changelog: false, credentialsId: 'HydroRobot_AccessToken', poll: false, url: repo
+  if (env.CHANGE_ID != null ){
+    git changelog: false, credentialsId: 'HydroRobot_AccessToken', poll: false, url: repo, branch: env.CHANGE_BRANCH
+  } else {
+    git changelog: false, credentialsId: 'HydroRobot_AccessToken', poll: false, url: repo, branch: env.BRANCH_NAME
+  }
 }
 
 def getVersion(){
@@ -115,7 +119,7 @@ def bumpGrpc(String newVersion, String search, String patch, String path){
     sh script: "rm -rf tmp", label: "Remove temp file"
 }
 
-//Команды для запуска тестов (каждой репе своя?)
+//Run test
 def runTest(){
   sh script: "$TESTCMD", label: "Run test task"
 }
