@@ -142,6 +142,7 @@ def buildDocker(String registryUrl){
     //run build command and store build tag 
     tagVersion = getVersion() 
     sh script: "docker build -t $registryUrl/$SERVICEIMAGENAME:$tagVersion .", label: "Run build docker task";
+    sh script: "docker tag $registryUrl/$SERVICEIMAGENAME:$tagVersion $registryUrl/$SERVICEIMAGENAME:latest", label: "Run build docker task";
 }
 
 def pushDocker(String registryUrl){
@@ -149,6 +150,7 @@ def pushDocker(String registryUrl){
     withCredentials([usernamePassword(credentialsId: 'hydrorobot_docker_creds', passwordVariable: 'password', usernameVariable: 'username')]) {
       sh script: "docker login --username $username --password $password"
       sh script: "docker push $registryUrl/$SERVICEIMAGENAME:$tagVersion",label: "push docker image to registry"
+      sh script: "docker push $registryUrl/$SERVICEIMAGENAME:latest",label: "push docker image to registry"
     }
 }
 
@@ -156,17 +158,17 @@ def pushDocker(String registryUrl){
 def updateDockerCompose(String newVersion){
   dir('docker-compose'){
     //Change template
-    sh script: "sed \"s/.*image:.*/    image: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" ${SERVICENAME}.service.template > ${SERVICENAME}.compose", label: "sed $SERVICENAME version"
+    sh script: "sed -i \"s/.*image:.*/    image: hydrosphere\\/$SERVICEIMAGENAME:$newVersion/g\" ${SERVICENAME}.service.template", label: "sed $SERVICENAME version"
     //Merge compose into 1 file
     composeMerge = "docker-compose"
-    composeService = sh label: "Get all template", returnStdout: true, script: "ls *.compose"
+    composeService = sh label: "Get all template", returnStdout: true, script: "ls *.template"
     list = composeService.split( "\\r?\\n" )
     for(l in list){
         composeMerge = composeMerge + " -f $l"
     }
-    composeMerge = composeMerge + " config > docker-compose.yaml"
+    composeMerge = composeMerge + " config > ../docker-compose.yaml"
     sh script: "$composeMerge", label:"Merge compose file"
-    sh script: "cp docker-compose.yaml ../docker-compose.yaml"
+    //sh script: "cp docker-compose.yaml ../docker-compose.yaml"
   }
 }
 
