@@ -40,4 +40,4 @@ COPY --chown=app:app app /app
 
 WORKDIR /app
 
-CMD python3 grpc_app.py
+CMD python3 server.py
