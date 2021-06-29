@@ -10,6 +10,18 @@ on:
       version:
         description: release version, ommit for patch
         default: ''
+        required: false
+
+      sdk_version:
+        description: sdk version, ommit for patch
+        default: ''
+        required: false
+
+      release:
+        description: release type (local|global)
+        default: local
+        required: false
+
 
 # Secrets:
 #   DOCKERHUB_USERNAME - also used as the dockerhub repository url
@@ -19,7 +31,8 @@ on:
 env:
   HYDRO_SERVING_REPO: Hydrospheredata/hydro-serving
   IMAGE: hydro-auto-od # name of the built image
-  
+  REGISTRY: hydrosphere
+
 jobs:
   Build_and_publish:
     runs-on: ubuntu-latest
@@ -38,21 +51,17 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        
+
     - name: Build and push
       id: docker_build
       uses: docker/build-push-action@v2
       with:
         push: true
-        tags: hydrosphere/${{ env.IMAGE }}:${{ github.sha }}
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
         
     - name: Image digest
       run: echo ${{ steps.docker_build.outputs.digest }} 
       
-    # - name: Upload docker image artifact
-    #   uses: ishworkh/docker-image-artifact-upload@v1
-    #   with:
-    #     image: "hydrosphere/${{ env.IMAGE }}:${{ github.sha }}"
         
     - name: Update image version in hydro-serving repo
       if: github.event_name == 'push'
@@ -61,7 +70,7 @@ jobs:
         workflow: Local release
         token: ${{ secrets.HYDRO_SERVING_TOKEN }}
         repo: ${{ env.HYDRO_SERVING_REPO }}
-        inputs: '{"service_image_name":"${{ env.IMAGE }}", "registry_url":"hydrosphere", "tag":"${{ github.sha }}"}'
+        inputs: '{"service_image_name":"${{ env.IMAGE }}", "registry_url":"${{ env.REGISTRY }}", "tag":"${{ github.sha }}"}'
       
   Release:
     needs: [Build_and_publish]
@@ -78,7 +87,28 @@ jobs:
         if: github.event.inputs.version == ''
         id: bump
         uses: codacy/git-version@2.4.0
-        
+
+      - name: Bump sdk
+        if: github.event.inputs.sdk_version == '' && github.event.inputs.release == 'local'
+        run: |
+          SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[-1]')
+          echo $SDK_VERSION
+          find . -type f -name "requirements.txt" -exec sed -i '' 's/hydrosdk~=.*/hydrosdk~="$SDK_VERSION"/g' {} +
+          
+      - name: Bump sdk to latest stable version
+        if: github.event.inputs.sdk_version == '' && github.event.inputs.release == 'global'
+        run: |
+          SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version)
+          echo $SDK_VERSION
+          find . -type f -name "requirements.txt" -exec sed -i '' 's/hydrosdk~=.*/hydrosdk~="$SDK_VERSION"/g' {} +
+
+      - name: Bump sdk force
+        if: github.event.inputs.sdk_version != ''
+        run: |
+          SDK_VERSION=${{ github.event.inputs.sdk_version }}
+          echo $SDK_VERSION
+          find . -type f -name "requirements.txt" -exec sed -i '' 's/hydrosdk~=.*/hydrosdk~="$GRPC_VERSION"/g' {} +
+         
       - name: Set VERSION variable
         if: github.event.inputs.version == ''
         run: echo VERSION=${{ steps.bump.outputs.version }} >> $GITHUB_ENV
@@ -90,7 +120,7 @@ jobs:
       - name: Docker Image Artifact Download
         uses: ishworkh/docker-image-artifact-download@v1
         with:
-          image: "hydrosphere/${{ env.IMAGE }}:${{ github.sha }}"
+          image: "${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}"
           
       - name: Docker Login
         uses: docker/login-action@v1.9.0
@@ -99,10 +129,10 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
           
       - name: Retag image
-        run: "docker tag hydrosphere/${{ env.IMAGE }}:${{ github.sha }} hydrosphere/${{ env.IMAGE }}:v${{ env.VERSION }}"
+        run: "docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE }}:v${{ env.VERSION }}"
       
       - name: Push image
-        run: "docker push hydrosphere/${{ env.IMAGE }}:v${{ env.VERSION }}"
+        run: "docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:v${{ env.VERSION }}"
 
       - name: Commit new version
         run: "echo ${{ env.VERSION }} > version"
@@ -119,7 +149,6 @@ jobs:
         
       - name: Push tag
         run: "git push --tags"
-        # TODO: update grpc version
         
   Status:
     runs-on: ubuntu-latest
