@@ -158,7 +158,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             logging.info("Uploading a monitoring model for modelversion_id=%d", monitored_model_version_id)
             model_version = model_version_builder.build(hs_cluster)
 
-        upload_model_with_circuit_breaker(model_version, timeout=DEFAULT_TIMEOUT)
+        upload_model_with_circuit_breaker(model_version, timeout=int(DEFAULT_TIMEOUT))
 
     except TimeoutException as e:
         logging.error(

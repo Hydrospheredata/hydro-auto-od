@@ -1,7 +1,7 @@
 # This realization is based in two projects combined to
-# find an optimal model together with a hyperparameter
+# find an optimal model together with a hyperparameter.
 # Specifically Mass Volume is used to maintain the process
-# Hydro Automatic Outlier Detection
+# of Hydro Automatic Outlier Detection.
 
 # Model Selection
 # https://github.com/ngoix/EMMV_benchmarks
@@ -12,11 +12,9 @@
 # NOTES
 
 # 1) Working only with PyOD realization of algorithms
-# 2) Currently candidates are presented by IForest, LOF and OCSVM
+# 2) Currently models are presented by IForest, LOF and OCSVM
 # 3) Hyperparameter is being searched for LOF and IForest only
-# 4) Contamination parameter is assigned to 4%. Except of anomalies
-# this helps to identify potential drifts in features or in overall
-# data given to a nicely chosen model
+# 4) Contamination parameter is assigned to 4%. 
 
 
 import numpy as np

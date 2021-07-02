@@ -7,10 +7,8 @@ try:
     GRPC_PORT: int = int(os.getenv("GRPC_PORT", 5000))
     CLUSTER_ENDPOINT = os.getenv("CLUSTER_ENDPOINT", "http://localhost")
     S3_ENDPOINT: str = os.getenv("S3_ENDPOINT")
-
-    DEFAULT_RUNTIME: str = os.getenv("DEFAULT_RUNTIME", "hydrosphere/serving-runtime-python-3.6:2.1.0")
+    DEFAULT_RUNTIME: str = os.getenv("DEFAULT_RUNTIME", "hydrosphere/serving-runtime-python-3.7:3.0.0-dev4")
     DEFAULT_TIMEOUT: int = os.getenv("DEFAULT_TIMEOUT", 120)
-
     MONGO_URL = os.getenv("MONGO_URL", "localhost")
     MONGO_PORT = int(os.getenv("MONGO_PORT", 27017))
     MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
