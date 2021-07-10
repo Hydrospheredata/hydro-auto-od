@@ -57,6 +57,12 @@ jobs:
           echo $SDK_VERSION
           poetry add hydrosdk=$SDK_VERSION
 
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2

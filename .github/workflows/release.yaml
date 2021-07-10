@@ -170,6 +170,12 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: poetry version ${{ env.VERSION }}
 
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
@@ -201,22 +207,15 @@ jobs:
           git commit -m "Releasing ${{ env.IMAGE }}:${{ env.VERSION }}" -a
           git push
           
-      - name: Tag commit
-        if: github.event_name == 'workflow_dispatch'
-        run: "git tag ${{ env.VERSION }}"
-        
-      - name: Push tag
-        if: github.event_name == 'workflow_dispatch'
-        run: "git push --tags"
-        
-  Status:
-    runs-on: ubuntu-latest
-    needs: [Build_and_publish]
-    if: always()
-    steps:
-      - uses: martialonline/workflow-status@v2
-        id: check
-      - run: |
-          echo "release status: ${{  steps.check.outputs.status  }}"
-        
-      
+      - name: Reports
+        id: generate-output
+        run: echo "::set-output name=tag-output::${{ env.VERSION }}"
+
+      - name: Create github release
+        uses: meeDamian/github-release@2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ env.VERSION }}
+
+    outputs:
+      tag: ${{ steps.generate-output.outputs.tag-output }}
