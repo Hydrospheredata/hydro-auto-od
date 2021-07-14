@@ -22,9 +22,9 @@ RUN curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poet
 RUN mv /root/.poetry $POETRY_PATH
 RUN python -m venv $VENV_PATH
 RUN poetry config virtualenvs.create false
-RUN poetry config experimental.new-installer false
+RUN pip install --upgrade pip
+COPY . ./
 
-COPY poetry.lock pyproject.toml ./
 RUN poetry install --no-interaction --no-ansi -vvv
 
 
@@ -45,11 +45,8 @@ HEALTHCHECK --start-period=10s CMD /bin/grpc_health_probe -addr=:${GRPC_PORT}
 
 COPY --from=build --chown=app:app /bin/grpc_health_probe /bin/grpc_health_probe
 
-COPY --chown=app:app version version
-COPY --chown=app:app hydro_auto_od /app
-
 COPY --from=build $VENV_PATH $VENV_PATH
 
-WORKDIR /app
+COPY . ./
 
-CMD python3 server.py
+CMD . $VENV_PATH/bin/activate && python -m hydro_auto_od.server
