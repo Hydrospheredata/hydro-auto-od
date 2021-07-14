@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "hydro-auto-od"
+name = "hydro_auto_od"
 version = "0.1.0"
 description = "Service is responsible for creating monitoring metrics for deployed machine learning models via unsuperviesd AutoML techniques"
 authors = ["hydrosphere.io"]

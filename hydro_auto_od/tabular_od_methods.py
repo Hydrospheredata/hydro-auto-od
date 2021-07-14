@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Callable, List
+from typing import List
 from hydro_serving_grpc.serving.contract.signature_pb2 import ModelSignature
 from hydro_serving_grpc.serving.contract.field_pb2 import ModelField
 from hydro_serving_grpc.serving.contract.types_pb2 import (

@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
-import os
 from typing import Optional
 
 from pymongo import MongoClient
 from pymongo.database import Database, Collection
-from config import MONGO_AUTH_DB, MONGO_DB, MONGO_PASS, MONGO_PORT, MONGO_URL, MONGO_USER
+from hydro_auto_od.config import config
 
 
 class AutoODMethodStatuses(Enum):
@@ -44,13 +43,13 @@ class TrainingStatusStorage:
     """Working with database to store training statuses"""
     @staticmethod
     def __get_mongo_client():
-        return MongoClient(host=MONGO_URL, port=MONGO_PORT,
-                           username=MONGO_USER, password=MONGO_PASS,
-                           authSource=MONGO_AUTH_DB)
+        return MongoClient(host=config.mongo_url, port=config.mongo_port,
+                           username=config.mongo_user, password=config.mongo_pass,
+                           authSource=config.mongo_auth_db)
 
     @staticmethod
     def __db() -> Database:
-        return TrainingStatusStorage.__get_mongo_client()[MONGO_DB]
+        return TrainingStatusStorage.__get_mongo_client()[config.mongo_db]
 
     @staticmethod
     def __collection() -> Collection:

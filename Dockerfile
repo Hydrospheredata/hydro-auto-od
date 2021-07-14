@@ -46,7 +46,7 @@ HEALTHCHECK --start-period=10s CMD /bin/grpc_health_probe -addr=:${GRPC_PORT}
 COPY --from=build --chown=app:app /bin/grpc_health_probe /bin/grpc_health_probe
 
 COPY --chown=app:app version version
-COPY --chown=app:app app /app
+COPY --chown=app:app hydro_auto_od /app
 
 COPY --from=build $VENV_PATH $VENV_PATH
 

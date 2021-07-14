@@ -22,8 +22,8 @@ import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
-from sklearn.model_selection import train_test_split, ShuffleSplit
-from tuning import model_tuning, high_tuning, low_tuning
+from sklearn.model_selection import train_test_split
+from hydro_auto_od.tuning import model_tuning, high_tuning, low_tuning
 
 
 models = {'IForest': IForest, 'LOF': LOF, 'OCSVM': OCSVM}

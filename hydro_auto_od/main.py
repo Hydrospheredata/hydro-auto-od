@@ -20,15 +20,14 @@ from hydrosdk.image import DockerImage
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
 from hydro_serving_grpc.serving.contract.field_pb2 import ModelField
 
-from config import DEFAULT_RUNTIME
-from utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
-from selection import model_selection
-from tabular_od_methods import TabularOD
-from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
-from config import CLUSTER_ENDPOINT, S3_ENDPOINT, DEFAULT_RUNTIME, DEFAULT_TIMEOUT
+from hydro_auto_od.utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
+from hydro_auto_od.selection import model_selection
+from hydro_auto_od.tabular_od_methods import TabularOD
+from hydro_auto_od.training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
+from hydro_auto_od.config import config
 
 
-hs_cluster = Cluster(CLUSTER_ENDPOINT)
+hs_cluster = Cluster(config.cluster_endpoint)
 
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
@@ -110,8 +109,8 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     logging.info(
         "Reading training data from %s for modelversion_id=%d", 
         training_data_path, monitored_model_version_id)
-    if S3_ENDPOINT:
-        s3 = S3FileSystem(client_kwargs={'endpoint_url': S3_ENDPOINT})
+    if config.s3_endpoint:
+        s3 = S3FileSystem(client_kwargs={'endpoint_url': config.s3_endpoint})
         training_data = pd.read_csv(s3.open(training_data_path, mode='rb', names=supported_fields_names))
     else:
         training_data = pd.read_csv(training_data_path, names=supported_fields_names)
@@ -145,7 +144,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \
                 .with_payload(payload_filenames) \
-                .with_runtime(DockerImage.from_string(DEFAULT_RUNTIME)) \
+                .with_runtime(DockerImage.from_string(config.default_runtime)) \
                 .with_metadata({
                     "created_by": "hydro_auto_od",
                     "is_metric": 'True',
@@ -158,7 +157,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             logging.info("Uploading a monitoring model for modelversion_id=%d", monitored_model_version_id)
             model_version = model_version_builder.build(hs_cluster)
 
-        upload_model_with_circuit_breaker(model_version, timeout=int(DEFAULT_TIMEOUT))
+        upload_model_with_circuit_breaker(model_version, timeout=config.default_timeout)
 
     except TimeoutException as e:
         logging.error(

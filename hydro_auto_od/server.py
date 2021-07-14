@@ -1,6 +1,5 @@
 import logging
 from logging.config import fileConfig
-import os
 from concurrent import futures
 
 import grpc
@@ -16,9 +15,9 @@ from grpc_health.v1.health_pb2 import HealthCheckResponse
 from grpc_health.v1.health_pb2_grpc import HealthServicer
 from grpc_health.v1.health_pb2_grpc import add_HealthServicer_to_server
 
-from config import GRPC_PORT
-from main import process_auto_metric_request
-from training_status_storage import TrainingStatusStorage
+from hydro_auto_od.config import config
+from hydro_auto_od.main import process_auto_metric_request
+from hydro_auto_od.training_status_storage import TrainingStatusStorage
 
 fileConfig("resources/logging_config.ini")
 
@@ -51,9 +50,9 @@ def serve():
     servicer = AutoODServiceServicer()
     add_AutoOdServiceServicer_to_server(servicer, server)
     add_HealthServicer_to_server(servicer, server)
-    server.add_insecure_port(f'[::]:{GRPC_PORT}')
+    server.add_insecure_port(f'[::]:{config.grpc_port}')
     server.start()
-    logging.info(f"Server started at [::]:{GRPC_PORT}")
+    logging.info(f"Server started at [::]:{config.grpc_port}")
     server.wait_for_termination()
 
 
