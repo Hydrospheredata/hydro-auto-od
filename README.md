@@ -7,6 +7,7 @@ This launches a process of creating a metric for monitoring this new model. Ther
 To use this service, first look at OpenAPI spec in [hydro_auto_od_openapi.yaml](hydro-auto-od-openapi.yaml)
 
 
+
 ## Creating Auto Metric State Diagram
 ![](docs/hydro_auto_od_state_diagram.png)
 ## Which models are eligible for creating an auto-od metric?
