@@ -19,7 +19,7 @@ from hydro_auto_od.config import config
 from hydro_auto_od.main import process_auto_metric_request
 from hydro_auto_od.training_status_storage import TrainingStatusStorage
 
-fileConfig("resources/logging_config.ini")
+fileConfig("hydro_auto_od/resources/logging_config.conf")
 
 
 class AutoODServiceServicer(AutoOdServiceServicer, HealthServicer):
