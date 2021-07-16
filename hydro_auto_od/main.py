@@ -131,7 +131,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             monitoring_model_folder_path = \
                 f"{tmp_dir_name}/{monitored_model.name}v{monitored_model.version}_auto_metric"
-            copytree("resources/monitoring_model_template", monitoring_model_folder_path)
+            copytree("hydro_auto_od/resources/monitoring_model_template", monitoring_model_folder_path)
             joblib.dump(outlier_detector, f'{monitoring_model_folder_path}/outlier_detector.joblib')
 
             # Save names and dtypes of analysed model fields to use in handling new requests in func_main.py
