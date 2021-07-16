@@ -169,12 +169,6 @@ jobs:
       - name: Bump service version
         if: github.event_name == 'workflow_dispatch'
         run: poetry version ${{ env.VERSION }}
-
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           
       - name: Build and push
         id: docker_build
