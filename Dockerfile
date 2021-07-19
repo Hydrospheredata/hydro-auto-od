@@ -32,6 +32,7 @@ FROM base as runtime
 
 RUN useradd -u 42069 --create-home --shell /bin/bash app
 USER app
+WORKDIR /app
 
 # non-interactive env vars https://bugs.launchpad.net/ubuntu/+source/ansible/+bug/1833013
 ENV DEBIAN_FRONTEND=noninteractive
