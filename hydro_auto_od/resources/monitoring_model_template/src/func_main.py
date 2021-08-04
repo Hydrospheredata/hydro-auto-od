@@ -1,6 +1,4 @@
 import json
-
-import hydro_serving_grpc as hs
 import joblib
 import numpy as np
 
@@ -14,5 +12,5 @@ FIELDS = config['field_names']
 
 def predict(**kwargs):
     x = np.array([kwargs.get(field_name) for field_name in FIELDS], dtype=float)
-    score = od_model.predict_proba(x.reshape(1, -1), method='unify')[:,1]
+    score = od_model.predict_proba(x.reshape(1, -1), method='unify')[:, 1]
     return {"value": score.item()}

@@ -100,10 +100,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
 
     logging.info("Retrieving monitored model modelversion_id=%d", monitored_model_version_id)
     monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
-
-    supported_input_fields = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
-    supported_output_fields = TabularOD.get_compatible_fields(monitored_model.signature.outputs)
-    supported_fields: List[ModelField] = supported_input_fields + supported_output_fields
+    supported_fields: List[ModelField] = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
     supported_fields_names: List[str] = [field.name for field in supported_fields]
 
     logging.info(
@@ -140,7 +137,6 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
                 json.dump(monitoring_model_config, fields_config_file)
 
             payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
-
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \
                 .with_payload(payload_filenames) \
