@@ -43,7 +43,7 @@ FROM base as runtime
 
 RUN useradd -u 42069 --create-home --shell /bin/bash app
 USER app
-WORKDIR /app
+WORKDIR /home/app
 
 ENV GRPC_PORT=5000
 EXPOSE ${GRPC_PORT}
@@ -54,7 +54,5 @@ COPY --from=build --chown=app:app /bin/grpc_health_probe /bin/grpc_health_probe
 COPY --from=build --chown=app:app $VENV_PATH $VENV_PATH
 
 COPY --chown=app:app hydro_auto_od hydro_auto_od
-
-COPY --chown=app:app requirements.txt requirements.txt
 
 CMD python -m hydro_auto_od.server
