@@ -48,13 +48,13 @@ def model_selection(data: pd.DataFrame):
       
     chosen_name = chosen_model.__name__
     if chosen_name == 'OCSVM':
-        final_model = chosen_model(**{'contamination': 0.04})
+        final_model = chosen_model(**{'contamination': 0.03})
     else:
         # Choosing hyperparameter
         parameters = algo_param[chosen_name]
         chosen_params = model_tuning(x_train, x_test, base_estimator=chosen_model,
                                      parameters=parameters, alphas=np.arange(0.05, 1., 0.05))
-        chosen_params['contamination'] = 0.04
+        chosen_params['contamination'] = 0.03
         final_model= chosen_model(**chosen_params)
 
     final_model.fit(X)
