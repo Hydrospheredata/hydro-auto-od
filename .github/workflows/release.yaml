@@ -36,7 +36,9 @@ env:
   HYDRO_SERVING_REPO: ${{ github.repository_owner }}/hydro-serving
   IMAGE: hydro-auto-od # name of the built image
   REGISTRY: hydrosphere
-  
+  VERSION: ${{ github.event.inputs.version }}
+  SDK_VERSION: ${{ github.event.inputs.sdk_version }}
+
 jobs:
   Verify_version:
     runs-on: ubuntu-latest
@@ -54,7 +56,7 @@ jobs:
   Build_and_publish:
     needs: Verify_version
     if: >
-      needs.Verify_version.outputs.latest_version != github.event.inputs.version && (
+      needs.Verify_version.outputs.latest_version != env.VERSION && (
       github.event_name == 'workflow_dispatch' || 
       github.event_name == 'push')
     runs-on: ubuntu-latest
@@ -123,22 +125,22 @@ jobs:
 
       # Bump version  
       - name: Bump sdk
-        if: github.event.inputs.sdk_version == '' && env.RELEASE == 'local'
+        if: env.SDK_VERSION == '' && env.RELEASE == 'local'
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[]' | sort -V | tail -n 1)
           echo $SDK_VERSION
          # poetry add hydrosdk=$SDK_VERSION
           
       - name: Bump sdk to latest stable version
-        if: github.event.inputs.sdk_version == '' && env.RELEASE == 'global'
+        if: env.SDK_VERSION == '' && env.RELEASE == 'global'
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version)
           echo $SDK_VERSION
           poetry add hydrosdk=$SDK_VERSION
           
       - name: Set manual sdk version
-        if: github.event.inputs.sdk_version != ''
-        run: poetry add hydrosdk=${{ github.event.inputs.sdk_version }}
+        if: env.SDK_VERSION != ''
+        run: poetry add hydrosdk=${{ env.SDK_VERSION }}
 
       # Bump service version  
       - name: Get latest tag
@@ -154,11 +156,11 @@ jobs:
       
       # Set version variable
       - name: Set VERSION variable
-        if: github.event.inputs.version == '' && github.event_name == 'workflow_dispatch'
+        if: env.VERSION == '' && github.event_name == 'workflow_dispatch'
         run: echo VERSION=${{ steps.bump_version.outputs.next-version }} >> $GITHUB_ENV
         
       - name: Set VERSION variable
-        if: github.event.inputs.version != '' && github.event_name == 'workflow_dispatch'
+        if: env.VERSION != '' && github.event_name == 'workflow_dispatch'
         run: echo VERSION=${{ github.event.inputs.version }} >> $GITHUB_ENV
 
       - name: Set VERSION variable
