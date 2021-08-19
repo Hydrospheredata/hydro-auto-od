@@ -142,35 +142,23 @@ jobs:
         if: ${{ env.SDK_VERSION }} != ''
         run: poetry add hydrosdk=${{ env.SDK_VERSION }}
 
-      # Bump service version  
-      - name: Get latest tag
-        id: get-latest-tag
-        uses: actions-ecosystem/action-get-latest-tag@v1
-
-      - name: Bump release version
-        id: bump_version
-        uses: christian-draeger/increment-semantic-version@1.0.2
-        with:
-          current-version: ${{ steps.get-latest-tag.outputs.tag }}
-          version-fragment: ${{ github.event.inputs.bump }}
+        # Bump service version
+      - name: bump version
+        if: ${{ env.VERSION }} == '' && github.event_name == 'workflow_dispatch'
+        run: poetry version ${{ github.event.inputs.bump }}
+        
+      - name: force bump version
+        if: ${{ env.VERSION }} != '' && github.event_name == 'workflow_dispatch'
+        run: poetry version ${{ env.VERSION }}
       
       # Set version variable
       - name: Set VERSION variable
-        if: ${{ env.VERSION }} == '' && github.event_name == 'workflow_dispatch'
-        run: echo VERSION=${{ steps.bump_version.outputs.next-version }} >> $GITHUB_ENV
-        
-      - name: Set VERSION variable
-        if: ${{ env.VERSION }} != '' && github.event_name == 'workflow_dispatch'
-        run: echo VERSION=${{ github.event.inputs.version }} >> $GITHUB_ENV
-
-      - name: Set VERSION variable
-        if: github.event_name == 'push'
-        run: echo VERSION=${{ github.sha }} >> $GITHUB_ENV
-
-      # Bump version
-      - name: Bump service version
         if: github.event_name == 'workflow_dispatch'
-        run: poetry version ${{ env.VERSION }}
+        run: echo VERSION=$(poetry version -s) >> $GITHUB_ENV
+
+      - name: Set VERSION variable
+        if: github.event_name != 'workflow_dispatch'
+        run: echo VERSION=${{ github.sha }} >> $GITHUB_ENV
           
       - name: Build and push
         id: docker_build
