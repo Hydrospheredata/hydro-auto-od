@@ -125,21 +125,21 @@ jobs:
 
       # Bump version  
       - name: Bump sdk
-        if: env.SDK_VERSION == '' && env.RELEASE == 'local'
+        if: ${{ env.SDK_VERSION }} == '' && env.RELEASE == 'local'
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[]' | sort -V | tail -n 1)
           echo $SDK_VERSION
          # poetry add hydrosdk=$SDK_VERSION
           
       - name: Bump sdk to latest stable version
-        if: env.SDK_VERSION == '' && env.RELEASE == 'global'
+        if: ${{ env.SDK_VERSION }} == '' && env.RELEASE == 'global'
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version)
           echo $SDK_VERSION
           poetry add hydrosdk=$SDK_VERSION
           
       - name: Set manual sdk version
-        if: env.SDK_VERSION != ''
+        if: ${{ env.SDK_VERSION }} != ''
         run: poetry add hydrosdk=${{ env.SDK_VERSION }}
 
       # Bump service version  
