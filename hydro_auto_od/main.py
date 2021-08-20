@@ -128,14 +128,14 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             monitoring_model_folder_path = \
                 f"{tmp_dir_name}/{monitored_model.name}v{monitored_model.version}_auto_metric"
-            copytree("/app/hydro_auto_od/resources/monitoring_model_template", monitoring_model_folder_path)
+            copytree(os.path.dirname(__file__) + "/resources/monitoring_model_template", monitoring_model_folder_path)
             joblib.dump(outlier_detector, f'{monitoring_model_folder_path}/outlier_detector.joblib')
 
             # Save names and dtypes of analysed model fields to use in handling new requests in func_main.py
             monitoring_model_config = {"field_names": supported_fields_names}
             with open(f"{monitoring_model_folder_path}/fields_config.json", "w+") as fields_config_file:
                 json.dump(monitoring_model_config, fields_config_file)
-
+                
             payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \
