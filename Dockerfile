@@ -8,6 +8,11 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VERSION=1.1.6 
 ENV PATH="$POETRY_PATH/bin:$VENV_PATH/bin:$PATH"
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl1.1>=1.1.1k-1+deb11u1 \
+    openssl>=1.1.1k-1+deb11u1 && \
+    rm -rf /var/lib/apt/lists/*
+
 
 FROM base as build
 
@@ -54,5 +59,7 @@ COPY --from=build --chown=app:app /bin/grpc_health_probe /bin/grpc_health_probe
 COPY --from=build --chown=app:app $VENV_PATH $VENV_PATH
 
 COPY --chown=app:app hydro_auto_od hydro_auto_od
+
+RUN chmod +t hydro_auto_od
 
 CMD python -m hydro_auto_od.server
