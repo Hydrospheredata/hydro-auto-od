@@ -29,7 +29,7 @@ from hydro_auto_od.config import config
 
 
 hs_cluster = Cluster(config.cluster_endpoint)
-
+encoder = False
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
     logging.info("Started processing auto-od request for modelversion_id=%d", monitored_model_version_id)
@@ -120,6 +120,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             if i.dtype == 7:
                 extr_features.append(i.name)
         training_data[extr_features] = categorical_encoder.fit_transform(training_data[extr_features])
+        encoder = True
 
     logging.info(
         "Running outlier model selection algorithm for modelversion_id=%d", monitored_model_version_id)
@@ -145,7 +146,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             with open(f"{monitoring_model_folder_path}/fields_config.json", "w+") as fields_config_file:
                 json.dump(monitoring_model_config, fields_config_file)
 
-            if 'categorical_encoder' in locals():
+            if encoder:
                 joblib.dump(categorical_encoder, f'{monitoring_model_folder_path}/categorical_encoder.joblib')
                 cat_features = {"categorical_features": extr_features}
                 with open(f"{monitoring_model_folder_path}/categorical_features.json", "w+") as fields_file:

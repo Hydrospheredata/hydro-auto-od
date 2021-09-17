@@ -1,30 +1,32 @@
-import os
 import json
 import joblib
+from os import path
 import pandas as pd
 
+encoder = False
 
 with open("/model/files/outlier_detector.joblib", "rb") as fp:
     od_model = joblib.load(fp)
+
 with open("/model/files/fields_config.json", "r") as fp:
     config = json.load(fp)
 
-FIELDS = config['field_names']
-encoder = False
+if path.exists('/model/files/categorical_encoder.joblib'):
 
-if os.path.exists("/model/files/categorical_encoder.joblib"):
     with open("/model/files/categorical_encoder.joblib", "rb") as fp:
         categorical_encoder = joblib.load(fp)
     with open("/model/files/categorical_features.json", "r") as fp:
         cat_features = json.load(fp)
-    CAT_FIELDS = cat_features['categorical_features']
+    cat_fields = cat_features["categorical_features"]
     encoder = True
+
+FIELDS = config["field_names"]
 
 def predict(**kwargs):
 
-    X = pd.DataFrame.from_dict([kwargs])[FIELDS]
+    x = pd.DataFrame.from_dict([kwargs])[FIELDS]
     if encoder:
-        X[CAT_FIELDS] = categorical_encoder.transform(X[CAT_FIELDS])
-    score = od_model.predict_proba(X, method='unify')[:, 1]
+        x[cat_fields] = categorical_encoder.transform(x[cat_fields])
+    score = od_model.predict_proba(x, method='unify')[:,1]
 
     return {"value": score.item()}
