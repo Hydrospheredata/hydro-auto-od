@@ -9,9 +9,10 @@ from typing import Tuple
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
-
 import pandas as pd
 from s3fs import S3FileSystem
+from sklearn.preprocessing import OrdinalEncoder
+
 
 from hydrosdk.modelversion import ModelVersion, ModelVersionBuilder
 from hydrosdk.exceptions import BadRequestException, TimeoutException
@@ -20,15 +21,14 @@ from hydrosdk.image import DockerImage
 from hydrosdk.monitoring import ThresholdCmpOp, MetricSpecConfig, MetricSpec
 from hydro_serving_grpc.serving.contract.field_pb2 import ModelField
 
-from config import DEFAULT_RUNTIME
-from utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
-from selection import model_selection
-from tabular_od_methods import TabularOD
-from training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
-from config import CLUSTER_ENDPOINT, S3_ENDPOINT, DEFAULT_RUNTIME, DEFAULT_TIMEOUT
+from hydro_auto_od.utils import get_monitoring_signature_from_monitored_model, DTYPE_TO_NAMES
+from hydro_auto_od.selection import model_selection
+from hydro_auto_od.tabular_od_methods import TabularOD
+from hydro_auto_od.training_status_storage import TrainingStatusStorage, AutoODMethodStatuses, TrainingStatus
+from hydro_auto_od.config import config
 
 
-hs_cluster = Cluster(CLUSTER_ENDPOINT)
+hs_cluster = Cluster(config.cluster_endpoint)
 
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
@@ -101,24 +101,29 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
 
     logging.info("Retrieving monitored model modelversion_id=%d", monitored_model_version_id)
     monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
-
-    supported_input_fields = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
-    supported_output_fields = TabularOD.get_compatible_fields(monitored_model.signature.outputs)
-    supported_fields: List[ModelField] = supported_input_fields + supported_output_fields
-    supported_fields_names: List[str] = [field.name for field in supported_fields]
+    supported_fields: List[ModelField] = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
+    supported_fields_names: List[str] = sorted([field.name for field in supported_fields])
 
     logging.info(
         "Reading training data from %s for modelversion_id=%d", 
         training_data_path, monitored_model_version_id)
-    if S3_ENDPOINT:
-        s3 = S3FileSystem(client_kwargs={'endpoint_url': S3_ENDPOINT})
+    if config.s3_endpoint:
+        s3 = S3FileSystem(client_kwargs={'endpoint_url': config.s3_endpoint})
         training_data = pd.read_csv(s3.open(training_data_path, mode='rb', names=supported_fields_names))
     else:
         training_data = pd.read_csv(training_data_path, names=supported_fields_names)
 
+    if 7 in [i.dtype for i in monitored_model.signature.inputs]:
+        extr_features = []
+        categorical_encoder = OrdinalEncoder(dtype ='int64')
+        for i in monitored_model.signature.inputs:
+            if i.dtype == 7:
+                extr_features.append(i.name)
+        training_data[extr_features] = categorical_encoder.fit_transform(training_data[extr_features])
+
     logging.info(
         "Running outlier model selection algorithm for modelversion_id=%d", monitored_model_version_id)
-    outlier_detector = model_selection(training_data)
+    outlier_detector = model_selection(training_data[supported_fields_names])
 
     logging.info(
         "Selected an outlier model=%s for modelversion_id=%d", 
@@ -132,7 +137,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             monitoring_model_folder_path = \
                 f"{tmp_dir_name}/{monitored_model.name}v{monitored_model.version}_auto_metric"
-            copytree("resources/monitoring_model_template", monitoring_model_folder_path)
+            copytree(os.path.dirname(__file__) + "/resources/monitoring_model_template", monitoring_model_folder_path)
             joblib.dump(outlier_detector, f'{monitoring_model_folder_path}/outlier_detector.joblib')
 
             # Save names and dtypes of analysed model fields to use in handling new requests in func_main.py
@@ -140,12 +145,17 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             with open(f"{monitoring_model_folder_path}/fields_config.json", "w+") as fields_config_file:
                 json.dump(monitoring_model_config, fields_config_file)
 
+            if 'categorical_encoder' in locals():
+                joblib.dump(categorical_encoder, f'{monitoring_model_folder_path}/categorical_encoder.joblib')
+                cat_features = {"categorical_features": extr_features}
+                with open(f"{monitoring_model_folder_path}/categorical_features.json", "w+") as fields_file:
+                    json.dump(cat_features, fields_file)
+ 
             payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
-
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \
                 .with_payload(payload_filenames) \
-                .with_runtime(DockerImage.from_string(DEFAULT_RUNTIME)) \
+                .with_runtime(DockerImage.from_string(config.default_runtime)) \
                 .with_metadata({
                     "created_by": "hydro_auto_od",
                     "is_metric": 'True',
@@ -158,7 +168,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             logging.info("Uploading a monitoring model for modelversion_id=%d", monitored_model_version_id)
             model_version = model_version_builder.build(hs_cluster)
 
-        upload_model_with_circuit_breaker(model_version, timeout=int(DEFAULT_TIMEOUT))
+        upload_model_with_circuit_breaker(model_version, timeout=config.default_timeout)
 
     except TimeoutException as e:
         logging.error(

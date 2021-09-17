@@ -1,9 +1,8 @@
 import numpy as np
 from sklearn.metrics import auc
 from itertools import combinations
-from joblib import Parallel, delayed
 from sklearn.utils import shuffle as sh
-from sklearn.model_selection import ParameterGrid, train_test_split
+from sklearn.model_selection import ParameterGrid
 
 
 def compute_mv(clf, X_train, X_test, alphas, 

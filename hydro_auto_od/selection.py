@@ -18,12 +18,13 @@
 
 
 import numpy as np
+import logging 
 import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF
 from pyod.models.ocsvm import OCSVM
-from sklearn.model_selection import train_test_split, ShuffleSplit
-from tuning import model_tuning, high_tuning, low_tuning
+from sklearn.model_selection import train_test_split
+from hydro_auto_od.tuning import model_tuning, high_tuning, low_tuning
 
 
 models = {'IForest': IForest, 'LOF': LOF, 'OCSVM': OCSVM}
@@ -33,7 +34,9 @@ algo_param = {
 }
 
 def model_selection(data: pd.DataFrame):
+
     X = np.array(data)
+    
     x_train, x_test = train_test_split(X, test_size = 0.2)
 
     # Evaluating each model among candidates
@@ -46,13 +49,13 @@ def model_selection(data: pd.DataFrame):
       
     chosen_name = chosen_model.__name__
     if chosen_name == 'OCSVM':
-        final_model = chosen_model(**{'contamination': 0.04})
+        final_model = chosen_model(**{'contamination': 0.03})
     else:
         # Choosing hyperparameter
         parameters = algo_param[chosen_name]
         chosen_params = model_tuning(x_train, x_test, base_estimator=chosen_model,
                                      parameters=parameters, alphas=np.arange(0.05, 1., 0.05))
-        chosen_params['contamination'] = 0.04
+        chosen_params['contamination'] = 0.03
         final_model= chosen_model(**chosen_params)
 
     final_model.fit(X)
