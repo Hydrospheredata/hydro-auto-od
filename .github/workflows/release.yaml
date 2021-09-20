@@ -36,7 +36,9 @@ env:
   HYDRO_SERVING_REPO: ${{ github.repository_owner }}/hydro-serving
   IMAGE: hydro-auto-od # name of the built image
   REGISTRY: hydrosphere
-  
+  VERSION: ${{ github.event.inputs.version }}
+  SDK_VERSION: ${{ github.event.inputs.sdk_version }}
+
 jobs:
   Verify_version:
     runs-on: ubuntu-latest
@@ -54,7 +56,7 @@ jobs:
   Build_and_publish:
     needs: Verify_version
     if: >
-      needs.Verify_version.outputs.latest_version != github.event.inputs.version && (
+      needs.Verify_version.outputs.latest_version != '$VERSION' && (
       github.event_name == 'workflow_dispatch' || 
       github.event_name == 'push')
     runs-on: ubuntu-latest
@@ -123,58 +125,40 @@ jobs:
 
       # Bump version  
       - name: Bump sdk
-        if: github.event.inputs.sdk_version == '' && env.RELEASE == 'local'
+        if: ${{ env.SDK_VERSION }} == '' && env.RELEASE == 'local'
         run: |
-          SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[-1]')
+          SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[]' | sort -V | tail -n 1)
           echo $SDK_VERSION
-          poetry add hydrosdk=$SDK_VERSION
+         # poetry add hydrosdk=$SDK_VERSION
           
       - name: Bump sdk to latest stable version
-        if: github.event.inputs.sdk_version == '' && env.RELEASE == 'global'
+        if: ${{ env.SDK_VERSION }} == '' && env.RELEASE == 'global'
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r .info.version)
           echo $SDK_VERSION
           poetry add hydrosdk=$SDK_VERSION
           
       - name: Set manual sdk version
-        if: github.event.inputs.sdk_version != ''
-        run: poetry add hydrosdk=${{ github.event.inputs.sdk_version }}
+        if: ${{ env.SDK_VERSION }} != ''
+        run: poetry add hydrosdk=${{ env.SDK_VERSION }}
 
-      # Bump service version  
-      - name: Get latest tag
-        id: get-latest-tag
-        uses: actions-ecosystem/action-get-latest-tag@v1
-
-      - name: Bump release version
-        id: bump_version
-        uses: christian-draeger/increment-semantic-version@1.0.2
-        with:
-          current-version: ${{ steps.get-latest-tag.outputs.tag }}
-          version-fragment: ${{ github.event.inputs.bump }}
+        # Bump service version
+      - name: bump version
+        if: ${{ env.VERSION }} == '' && github.event_name == 'workflow_dispatch'
+        run: poetry version ${{ github.event.inputs.bump }}
+        
+      - name: force bump version
+        if: ${{ env.VERSION }} != '' && github.event_name == 'workflow_dispatch'
+        run: poetry version ${{ env.VERSION }}
       
       # Set version variable
       - name: Set VERSION variable
-        if: github.event.inputs.version == '' && github.event_name == 'workflow_dispatch'
-        run: echo VERSION=${{ steps.bump_version.outputs.next-version }} >> $GITHUB_ENV
-        
-      - name: Set VERSION variable
-        if: github.event.inputs.version != '' && github.event_name == 'workflow_dispatch'
-        run: echo VERSION=${{ github.event.inputs.version }} >> $GITHUB_ENV
-
-      - name: Set VERSION variable
-        if: github.event_name == 'push'
-        run: echo VERSION=${{ github.sha }} >> $GITHUB_ENV
-
-      # Bump version
-      - name: Bump service version
         if: github.event_name == 'workflow_dispatch'
-        run: poetry version ${{ env.VERSION }}
+        run: echo VERSION=$(poetry version -s) >> $GITHUB_ENV
 
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Set VERSION variable
+        if: github.event_name != 'workflow_dispatch'
+        run: echo VERSION=${{ github.sha }} >> $GITHUB_ENV
           
       - name: Build and push
         id: docker_build
@@ -204,7 +188,7 @@ jobs:
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git commit -m "Releasing ${{ env.IMAGE }}:${{ env.VERSION }}" -a
+          git commit -m "Releasing ${{ env.IMAGE }}:${{ env.VERSION }}" -a --allow-empty
           git push
           
       - name: Reports
@@ -212,6 +196,7 @@ jobs:
         run: echo "::set-output name=tag-output::${{ env.VERSION }}"
 
       - name: Create github release
+        if: github.event_name == 'workflow_dispatch'
         uses: meeDamian/github-release@2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

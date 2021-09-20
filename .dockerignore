@@ -15,3 +15,10 @@ coverage.xml
 *,cover
 *.log
 .git
+.github
+.gitignore
+.dockerignore
+docs/
+jenkinsfile.disable.groovy
+Dockerfile*
+README.md

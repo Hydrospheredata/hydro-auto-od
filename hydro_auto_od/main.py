@@ -145,13 +145,13 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             monitoring_model_config = {"field_names": supported_fields_names}
             with open(f"{monitoring_model_folder_path}/fields_config.json", "w+") as fields_config_file:
                 json.dump(monitoring_model_config, fields_config_file)
-
+                
             if encoder:
                 joblib.dump(categorical_encoder, f'{monitoring_model_folder_path}/categorical_encoder.joblib')
                 cat_features = {"categorical_features": extr_features}
                 with open(f"{monitoring_model_folder_path}/categorical_features.json", "w+") as fields_file:
                     json.dump(cat_features, fields_file)
- 
+                    
             payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \

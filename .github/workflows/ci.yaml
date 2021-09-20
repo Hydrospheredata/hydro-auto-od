@@ -55,13 +55,7 @@ jobs:
         run: |
           SDK_VERSION=$(curl -Ls https://pypi.org/pypi/hydrosdk/json | jq -r '.releases | keys[-1]')
           echo $SDK_VERSION
-          poetry add hydrosdk=$SDK_VERSION
-
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+         # poetry add hydrosdk=$SDK_VERSION
 
       - name: Build and push
         id: docker_build
