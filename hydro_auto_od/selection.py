@@ -34,7 +34,7 @@ algo_param = {
 }
 
 def model_selection(data: pd.DataFrame):
-
+    
     X = np.array(data)
     
     x_train, x_test = train_test_split(X, test_size = 0.2)
