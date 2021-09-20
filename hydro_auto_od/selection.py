@@ -18,7 +18,6 @@
 
 
 import numpy as np
-import logging 
 import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.lof import LOF

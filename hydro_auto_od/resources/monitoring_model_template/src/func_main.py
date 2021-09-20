@@ -1,4 +1,3 @@
-import logging
 import json
 import joblib
 from os import path
