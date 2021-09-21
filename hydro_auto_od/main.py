@@ -9,9 +9,10 @@ from typing import Tuple
 from multiprocessing import Process
 from shutil import copytree
 from typing import List
-
 import pandas as pd
 from s3fs import S3FileSystem
+from sklearn.preprocessing import OrdinalEncoder
+
 
 from hydrosdk.modelversion import ModelVersion, ModelVersionBuilder
 from hydrosdk.exceptions import BadRequestException, TimeoutException
@@ -28,7 +29,7 @@ from hydro_auto_od.config import config
 
 
 hs_cluster = Cluster(config.cluster_endpoint)
-
+encoder = False
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
     logging.info("Started processing auto-od request for modelversion_id=%d", monitored_model_version_id)
@@ -101,7 +102,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     logging.info("Retrieving monitored model modelversion_id=%d", monitored_model_version_id)
     monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
     supported_fields: List[ModelField] = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
-    supported_fields_names: List[str] = [field.name for field in supported_fields]
+    supported_fields_names: List[str] = sorted([field.name for field in supported_fields])
 
     logging.info(
         "Reading training data from %s for modelversion_id=%d", 
@@ -112,9 +113,18 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     else:
         training_data = pd.read_csv(training_data_path, names=supported_fields_names)
 
+    if 7 in [i.dtype for i in monitored_model.signature.inputs]:
+        extr_features = []
+        categorical_encoder = OrdinalEncoder(dtype ='int64')
+        for i in monitored_model.signature.inputs:
+            if i.dtype == 7:
+                extr_features.append(i.name)
+        training_data[extr_features] = categorical_encoder.fit_transform(training_data[extr_features])
+        encoder = True
+
     logging.info(
         "Running outlier model selection algorithm for modelversion_id=%d", monitored_model_version_id)
-    outlier_detector = model_selection(training_data)
+    outlier_detector = model_selection(training_data[supported_fields_names])
 
     logging.info(
         "Selected an outlier model=%s for modelversion_id=%d", 
@@ -136,6 +146,12 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
             with open(f"{monitoring_model_folder_path}/fields_config.json", "w+") as fields_config_file:
                 json.dump(monitoring_model_config, fields_config_file)
                 
+            if encoder:
+                joblib.dump(categorical_encoder, f'{monitoring_model_folder_path}/categorical_encoder.joblib')
+                cat_features = {"categorical_features": extr_features}
+                with open(f"{monitoring_model_folder_path}/categorical_features.json", "w+") as fields_file:
+                    json.dump(cat_features, fields_file)
+                    
             payload_filenames = [os.path.basename(path) for path in glob.glob(f"{monitoring_model_folder_path}/*")]
             model_version_builder = ModelVersionBuilder(monitored_model.name + "_metric", monitoring_model_folder_path) \
                 .with_signature(get_monitoring_signature_from_monitored_model(monitored_model)) \
