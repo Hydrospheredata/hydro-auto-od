@@ -64,6 +64,6 @@ COPY --from=build --chown=app:app $VENV_PATH $VENV_PATH
 
 COPY --chown=app:app hydro_auto_od hydro_auto_od
 
-RUN chmod +t hydro_auto_od
+RUN chmod -R 754 hydro_auto_od/resources
 
 CMD python -m hydro_auto_od.server
