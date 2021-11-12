@@ -46,7 +46,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY poetry.lock pyproject.toml ./
 RUN poetry install --no-interaction --no-ansi -vvv
-
+ARG GIT_HEAD_COMMIT
+ARG GIT_CURRENT_BRANCH
+COPY . ./
+RUN if [ -z "$GIT_HEAD_COMMIT" ] ; then \
+    printf '{"name": "hydro-auto-od", "version":"%s", "gitHeadCommit":"%s","gitCurrentBranch":"%s", "pythonVersion":"%s"}\n' "$(cat version)" "$(git rev-parse HEAD)" "$(git rev-parse --abbrev-ref HEAD)" "$(python --version)" >> buildinfo.json ; else \
+    printf '{"name": "hydro-auto-od", "version":"%s", "gitHeadCommit":"%s","gitCurrentBranch":"%s", "pythonVersion":"%s"}\n' "$(cat version)" "$GIT_HEAD_COMMIT" "$GIT_CURRENT_BRANCH" "$(python --version)" >> buildinfo.json ; \
+    fi
 
 FROM base as runtime
 
