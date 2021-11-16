@@ -29,7 +29,6 @@ from hydro_auto_od.config import config
 
 
 hs_cluster = Cluster(config.cluster_endpoint)
-encoder = False
 
 def process_auto_metric_request(training_data_path: str, monitored_model_version_id: int) -> Tuple[int, str]:
     logging.info("Started processing auto-od request for modelversion_id=%d", monitored_model_version_id)
@@ -103,6 +102,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     monitored_model = ModelVersion.find_by_id(hs_cluster, monitored_model_version_id)
     supported_fields: List[ModelField] = TabularOD.get_compatible_fields(monitored_model.signature.inputs)
     supported_fields_names: List[str] = sorted([field.name for field in supported_fields])
+    encoder = False
 
     logging.info(
         "Reading training data from %s for modelversion_id=%d", 
@@ -125,7 +125,7 @@ def train_and_deploy_monitoring_model(monitored_model_version_id: int, training_
     logging.info(
         "Running outlier model selection algorithm for modelversion_id=%d", monitored_model_version_id)
     outlier_detector = model_selection(training_data[supported_fields_names])
-
+    
     logging.info(
         "Selected an outlier model=%s for modelversion_id=%d", 
         repr(outlier_detector), monitored_model_version_id)
